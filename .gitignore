@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data & Results (keep structure, ignore big files)
+results/backtest/*.png
+results/scanner/*.png
+.DS_Store
+
+# But keep scanner outputs (we want to commit latest scan)
+!results/scanner/latest_scan.csv
+!results/scanner/latest_scan.html
+
+# Secrets
+.env
+.env.local
+*.token
+dhan_token.txt
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.ipynb_checkpoints/

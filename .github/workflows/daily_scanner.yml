@@ -1,0 +1,71 @@
+name: Daily Momentum Scanner
+
+on:
+  schedule:
+    # 9:15 AM IST = 03:45 UTC on weekdays (Mon-Fri)
+    - cron: '45 3 * * 1-5'
+  workflow_dispatch:  # Allow manual trigger
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'config.py'
+      - 'run_scanner.py'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # To commit results
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Daily Scanner
+        env:
+          DHAN_CLIENT_ID: ${{ secrets.DHAN_CLIENT_ID }}
+          DHAN_ACCESS_TOKEN: ${{ secrets.DHAN_ACCESS_TOKEN }}
+        run: |
+          echo "Running scanner as of $(date -u +'%Y-%m-%d %H:%M UTC') / $(TZ='Asia/Kolkata' date +'%Y-%m-%d %H:%M IST')"
+          python run_scanner.py --workers 8
+          echo "Scanner finished"
+          ls -lh results/scanner/ || true
+
+      - name: Run Quick Backtest Check (single stock sanity)
+        run: |
+          python run_backtest.py --symbol HINDCOPPER --period 2y || echo "Backtest single check failed, continuing"
+
+      - name: Commit scanner results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/scanner/ || true
+          # Check if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            DATE_STR=$(TZ='Asia/Kolkata' date +'%Y-%m-%d')
+            git commit -m "📈 Daily scan $DATE_STR - Sanu Momentum Scanner [auto]"
+            git push
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scanner-results-${{ github.run_number }}
+          path: |
+            results/scanner/
+            results/backtest_single/
+          retention-days: 30
