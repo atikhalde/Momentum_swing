@@ -30,7 +30,7 @@ DAILY_TIMEFRAME = "D"
 
 # MA Type: Video transcript says "20 SMA laga lena hai, 10 SMA fast momentum" — so default is SMA (faithful to video)
 # BUT you asked about EMA 20 — EMA is exponential, more responsive. Both are valid. Change to "EMA" if you prefer EMA 20.
-MA_TYPE = "SMA"              # Options: "SMA" (video-faithful, per transcript) or "EMA" (alternative, your question)
+MA_TYPE = "EMA"              # Default EMA 20 per your request (video says SMA 20 per transcript, but EMA 20 is more responsive — set to "SMA" for strict video-faithful)
 # Note: Code computes BOTH SMA20/EMA20, EMA10/EMA10, SMA50/EMA50 — so you can switch instantly without re-fetch
 
 # Rule 1: Trend - Stock must be in clear UPTREND on Weekly
