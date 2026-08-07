@@ -33,11 +33,25 @@ If `.env` not set, scanner automatically uses `yfinance` + NSE `*.NS` tickers.
 
 ---
 
+## ⚠️ Data Provider Routing (Updated 2026-08-07 per user rule)
+
+- **Backtest (`run_backtest.py`) → yfinance ONLY** — always, even if Dhan credentials are set. This ensures reproducible 5-year historical data, free and consistent for NSE `.NS` symbols. Dhan is **never** used for backtesting.
+- **Live Scanner (`run_scanner.py`) → AUTO**: Tries **Dhan API first** if `DHAN_CLIENT_ID`/`DHAN_ACCESS_TOKEN` are in `.env`, then falls back to `yfinance`. This gives you live intraday accuracy when you have Dhan, but still works free without it.
+
+Set in `config.py`:
+```python
+ENFORCE_YFINANCE_FOR_BACKTEST = True   # backtest = yfinance only
+BACKTEST_DATA_PROVIDER = "YFINANCE"
+SCANNER_DATA_PROVIDER = "AUTO"         # scanner = Dhan -> yfinance
+```
+
+---
+
 ## ⚡ Quick Start
 
-### 1. Daily Live Scanner (Find stocks TODAY)
+### 1. Daily Live Scanner (Find stocks TODAY) — Uses Dhan → yfinance fallback
 ```bash
-# Scan full Nifty 500
+# Scan full Nifty 500 (Dhan if creds present, else yfinance)
 python run_scanner.py
 
 # Quick test on 50 stocks
@@ -54,9 +68,9 @@ python run_scanner.py --symbol HINDCOPPER
 
 **Scanner output columns:** `Symbol | Entry | SL | Risk_Pct | Target_15pct | Target_RR6 | Edge (FIBO/52W) | RR | Volume`
 
-### 2. 5-Year Backtest (Validate 1:6 RR)
+### 2. 5-Year Backtest (Validate 1:6 RR) — yfinance ONLY
 ```bash
-# Full 5-year backtest on Nifty 500 (takes ~30-60 min)
+# Full 5-year backtest on Nifty 500 (takes ~30-60 min) — always yfinance
 python run_backtest.py
 
 # Quick test on 30 stocks (~3 min)

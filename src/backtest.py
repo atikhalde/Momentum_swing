@@ -20,7 +20,7 @@ import os
 
 from config import *
 from src.indicators import add_indicators, atr, sma
-from src.data_provider import get_provider
+from src.data_provider import DataProvider, get_provider
 from src.strategy import SanuMomentumStrategy
 
 logger = logging.getLogger(__name__)
@@ -88,15 +88,24 @@ class SanuBacktester:
                  risk_per_trade: float = RISK_PER_TRADE_PCT,
                  max_risk: float = MAX_RISK_PER_TRADE_PCT,
                  commission: float = BACKTEST_COMMISSION,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 force_yfinance: bool = ENFORCE_YFINANCE_FOR_BACKTEST):
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.risk_per_trade = risk_per_trade
         self.max_risk = max_risk
         self.commission = commission
         self.verbose = verbose
-        self.provider = get_provider()
+        # FORCE yfinance for backtest per user requirement: "Backtest should always run on yfinance, don't use dhan api for backtesting"
+        if force_yfinance or ENFORCE_YFINANCE_FOR_BACKTEST:
+            self.provider = DataProvider(use_dhan=False)
+            logger.info("Backtester: FORCED yfinance provider (Dhan disabled for backtest per user rule)")
+        else:
+            self.provider = get_provider()
+        # Also force strategy's internal provider to yfinance to avoid mismatch
         self.strategy = SanuMomentumStrategy(verbose=False)
+        if force_yfinance or ENFORCE_YFINANCE_FOR_BACKTEST:
+            self.strategy.provider = DataProvider(use_dhan=False)
         self.trades: List[BacktestTrade] = []
         self.equity_curve = []
         self.market_filter_enabled = MARKET_FILTER_ENABLED

@@ -127,11 +127,17 @@ BSE_SUFFIX = ".BO"
 
 # ==================== DATA PROVIDER ====================
 # "Use dhan api and yfinance + nifty 500/cnx500"
+# Per user request 2026-08-07: Backtest MUST always use yfinance, never Dhan
 DATA_PROVIDER_PRIMARY = "DHAN"  # Try Dhan first if credentials available
 DATA_PROVIDER_FALLBACK = "YFINANCE"
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID", "")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN", "")
 DHAN_ENABLED = bool(DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN)
+# --- Provider Routing ---
+BACKTEST_DATA_PROVIDER = "YFINANCE"  # FORCE yfinance for backtest - historical data, reproducible, free
+SCANNER_DATA_PROVIDER = "AUTO"       # AUTO = Dhan if creds available else yfinance (live scanner)
+# If True, scanner will try Dhan first; backtest will NEVER use Dhan even if creds present
+ENFORCE_YFINANCE_FOR_BACKTEST = True
 
 # Yfinance settings
 YFINANCE_PERIOD_BACKTEST = "5y"  # Video asks for 5 years backtest

@@ -30,12 +30,14 @@ def main():
     args = parser.parse_args()
 
     print("="*70)
-    print(" Sanu Kumar Momentum Swing - 5 Year Backtest")
+    print(" Sanu Kumar Momentum Swing - 5 Year Backtest [yfinance ONLY per user rule]")
     print(" Video: https://youtu.be/EgSuB9D-xAw")
     print(" Strategy: Weekly Uptrend + Dry Vol Pullback + Daily Contraction Fibo 0.5-0.6/52W")
+    print(" Data Provider: yfinance ONLY (Dhan disabled for backtest)")
     print("="*70)
 
-    tester = SanuBacktester(initial_capital=args.capital, risk_per_trade=args.risk, verbose=True)
+    # Enforce yfinance for backtest - user explicitly said "Backtest should always run on yfinance, don't use dhan api for backtesting"
+    tester = SanuBacktester(initial_capital=args.capital, risk_per_trade=args.risk, verbose=True, force_yfinance=True)
 
     if args.symbol:
         print(f"\n Backtesting SINGLE symbol: {args.symbol}")
