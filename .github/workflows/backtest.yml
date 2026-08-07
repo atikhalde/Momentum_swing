@@ -1,0 +1,166 @@
+name: Backtest Report (5Y - yfinance ONLY)
+
+on:
+  workflow_dispatch:
+    inputs:
+      period:
+        description: 'Backtest period (yfinance period)'
+        required: true
+        default: '5y'
+        type: choice
+        options:
+          - '1y'
+          - '2y'
+          - '5y'
+          - '10y'
+      limit:
+        description: 'Universe limit (blank = full 500, else number e.g. 50)'
+        required: false
+        default: ''
+        type: string
+      capital:
+        description: 'Initial capital (Rs)'
+        required: false
+        default: '1000000'
+        type: string
+  schedule:
+    # Weekly backtest every Monday 6 AM IST = 00:30 UTC
+    - cron: '30 0 * * 1'
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/backtest.py'
+      - 'src/strategy.py'
+      - 'src/indicators.py'
+      - 'src/report_pdf.py'
+      - 'config.py'
+      - 'run_backtest.py'
+
+# yfinance ONLY for backtest per user rule - no Dhan secrets needed
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 120  # 5y full 500 can take ~90-120 min
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify yfinance + reportlab
+          python -c "import yfinance, reportlab; print(f'yfinance {yfinance.__version__} | reportlab {reportlab.Version}')"
+
+      - name: Run Backtest (yfinance ONLY)
+        env:
+          # Force yfinance - Dhan will be ignored even if secrets exist
+          PYTHONUNBUFFERED: '1'
+        run: |
+          echo "Backtest period: ${{ inputs.period || '5y' }}"
+          echo "Limit: ${{ inputs.limit || 'full 500' }}"
+          echo "Capital: ${{ inputs.capital || '1000000' }}"
+          echo "Provider: yfinance ONLY (Dhan disabled per user rule)"
+          echo "Start: $(date -u +'%Y-%m-%d %H:%M UTC') / $(TZ='Asia/Kolkata' date +'%Y-%m-%d %H:%M IST')"
+
+          # Build args
+          ARGS="--period ${{ inputs.period || '5y' }} --capital ${{ inputs.capital || '1000000' }}"
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          # Default for scheduled/push: limit 100 for CI speed (full 500 on manual)
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            # On schedule/push, run quick 100-stock sample to avoid 2h timeout
+            # Users can manually run full 500 via Actions -> Run workflow
+            if [ -z "${{ inputs.limit }}" ]; then
+              ARGS="$ARGS --limit 100"
+              echo "Non-manual run: auto-limiting to 100 stocks for CI speed"
+            fi
+          fi
+          
+          echo "Running: python run_backtest.py $ARGS"
+          python run_backtest.py $ARGS
+
+          echo "Backtest finished"
+          ls -lh results/backtest/ || true
+          echo "PDFs:"
+          ls -lh results/backtest/*.pdf 2>&1 | head -20 || echo "No PDFs"
+
+      - name: Verify PDF Report Generated
+        run: |
+          if ls results/backtest/*.pdf 1> /dev/null 2>&1; then
+            echo "✓ PDF report found"
+            ls -lh results/backtest/*.pdf
+            # Check PDF has content (size > 10K)
+            for f in results/backtest/*.pdf; do
+              SIZE=$(stat -c%s "$f")
+              echo "$f: $SIZE bytes"
+              if [ $SIZE -lt 10000 ]; then
+                echo "⚠ Warning: $f too small, may be empty"
+              fi
+            done
+          else
+            echo "✗ No PDF found - backtest may have failed"
+            exit 1
+          fi
+          echo "Trades:"
+          wc -l results/backtest/trades_5y.csv || true
+          echo "Metrics:"
+          cat results/backtest/metrics_5y.csv || true
+
+      - name: Commit Backtest Results (PDF + CSV + PNG)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ensure PDFs not ignored
+          git add -f results/backtest/*.pdf results/backtest/*.csv results/backtest/*.png results/backtest/*.txt 2>&1 | head -20
+          git add results/backtest/ 2>&1 | head -20 || true
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            DATE_STR=$(TZ='Asia/Kolkata' date +'%Y-%m-%d')
+            PERIOD="${{ inputs.period || '5y' }}"
+            LIMIT="${{ inputs.limit || '500' }}"
+            git commit -m "📊 Backtest Report $DATE_STR ($PERIOD, $LIMIT stocks, yfinance) - Auto [skip ci]"
+            git push
+          fi
+
+      - name: Upload Backtest Artifacts (PDF + CSV + PNG)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report-${{ github.run_number }}-${{ inputs.period || '5y' }}
+          path: |
+            results/backtest/*.pdf
+            results/backtest/*.csv
+            results/backtest/*.png
+            results/backtest/*.txt
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### 📊 Backtest Report Generated (yfinance ONLY)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Period: \`${{ inputs.period || '5y' }}\` | Limit: \`${{ inputs.limit || '100 (auto) / 500 full' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/backtest/metrics_5y.csv ]; then
+            echo "#### Metrics" >> $GITHUB_STEP_SUMMARY
+            echo '```csv' >> $GITHUB_STEP_SUMMARY
+            cat results/backtest/metrics_5y.csv >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### PDFs" >> $GITHUB_STEP_SUMMARY
+          ls -lh results/backtest/*.pdf 2>&1 | awk '{print "- " $9 " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY || echo "No PDFs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts: **backtest-report-${{ github.run_number }}**" >> $GITHUB_STEP_SUMMARY
