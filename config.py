@@ -89,7 +89,7 @@ CONTRACTION_BIG_DAYS = 15     # Big contraction window: 10-20 days consolidation
 CONTRACTION_BIG_CLUSTER_PCT = 0.15 # Big contraction cluster <15% (was 12%, now 15% to capture 11.45% + 14% cases)
 CONTRACTION_BIG_RANGE_FACTOR = 1.2 # Big candles can be slightly larger
 # Volume dried vs breakout (User: "after big breakout with volume there is contraction" — volume must be dried)
-VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.30 # Contraction avg volume <30% of breakout volume = dried (was 45% too lenient for your 6 examples -> many false; PANAMAPET 1-6% well below 30%, YESBANK 29.8% now correctly filtered)
+VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.25 # Contraction avg volume <25% of breakout volume = dried (was 30% still allows YESBANK 29.8% borderline; 25% correctly filters YESBANK 29.8% as false, keeps PANAMAPET 1-6% true)
 BREAKOUT_VOLUME_MULTIPLIER = 2.0 # Breakout candle vol >2.0x Avg20 is considered big breakout with volume
 BREAKOUT_RANGE_MULTIPLIER = 1.5 # Breakout range >1.5x ATR is considered big breakout
 # Weekly pullback is now considered SAME as contraction/pullback per user: "you can consider contraction as pullback as well"
@@ -100,7 +100,7 @@ WEEKLY_PULLBACK_OPTIONAL_IF_DAILY_CONTRACTION = True
 # Video: The EDGE - "0.5 to 0.6 ke paas jo bhi contraction ban raha hai, uski possibility kaafi zyada hai"
 # STRICT video replication: REQUIRE_EDGE=True -> only contraction inside Fibo/52W will pass
 # PRACTICAL live scanner: REQUIRE_EDGE=False -> contraction + SMA is enough, edge is bonus scoring (recommended, gives more signals)
-REQUIRE_EDGE_FILTER = True  # Changed per your feedback: True to filter false UNKNOWN edge stocks (was False -> 50 passes with 12 false UNKNOWN; now ~30-35 high-quality passes with dried volume)
+REQUIRE_EDGE_FILTER = False  # Reverted per your 6 examples: PANAMAPET small UNKNOWN edge is TRUE per your description (you did not mention Fibo/52W for those), so allow UNKNOWN but rely on dried volume 25% to filter false UNKNOWN (YESBANK 29.8% fails)
 FIBO_LEVEL_LOW = 0.50
 FIBO_LEVEL_HIGH = 0.60
 FIBO_ZONE_TOLERANCE = 0.05   # Increased to 0.05 (5% of swing range) for practical tolerance (strict would be 0.02)
@@ -152,6 +152,18 @@ UNIVERSE_CUSTOM_LIST = None  # Add your custom tickers here if needed
 # Yfinance suffix for NSE
 NSE_SUFFIX = ".NS"
 BSE_SUFFIX = ".BO"
+
+# ==================== MARKET CAP FILTER (User request 2026-08-07) ====================
+# "add 1 more filter stock should be from small cap or under market cap 5000 cr, whichever suits for all 6 examples"
+# Your 6 examples market caps (yfinance 2026-08-07): PANAMAPET 3054cr, NRBBEARING 4473cr, INDSWFTLAB 1983cr, GANDHAR 2376cr, HONASA 15571cr (mid cap), INDOBORAX 1285cr
+# 5000cr threshold includes 5/6 (HONASA excluded at 15571cr). Small cap (Nifty Smallcap 250) also excludes HONASA (mid cap, not in smallcap).
+# To include all 6, need <20000cr (HONASA 15571 <20000). We default to 5000cr per your request, but you can set 20000 to include HONASA and all 6.
+# Options: 5000 (strict small), 10000, 20000 (includes all 6), or 50000 (mid+small)
+MARKET_CAP_FILTER_ENABLED = True
+MARKET_CAP_MAX_CR = 20000  # Set to 20000 to include HONASA (15571cr) and all 6 examples per your request "whichever suits for all 6" - 5000 would exclude HONASA, 20000 includes all
+MARKET_CAP_FILTER_MODE = "BELOW_MAX"  # Options: "BELOW_MAX" (marketCap < MAX), "SMALLCAP_ONLY" (Nifty Smallcap 250 list), "EITHER" (smallcap OR below max) - default BELOW_MAX per your 5000cr request
+MARKET_CAP_FILTER_FOR_SCANNER = True  # Apply to live scanner (daily)
+MARKET_CAP_FILTER_FOR_BACKTEST = False  # Do NOT apply to backtest historically (market cap changes over 5y, current cap not accurate for past)
 
 # ==================== DATA PROVIDER ====================
 # "Use dhan api and yfinance + nifty 500/cnx500"

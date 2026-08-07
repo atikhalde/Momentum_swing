@@ -703,3 +703,103 @@ def calculate_entry_sl(contraction_high: float, contraction_low: float,
         "rr_at_15pct": (target_15pct - entry)/risk_per_share if risk_per_share!=0 else 0,
         "rr_at_20pct": (target_20pct - entry)/risk_per_share if risk_per_share!=0 else 0,
     }
+
+# ==================== MARKET CAP FILTER (User request 2026-08-07) ====================
+# "add 1 more filter stock should be from small cap or under market cap 5000 cr, whichever suits for all 6 examples"
+# Your 6 examples: PANAMAPET 3054cr, NRBBEARING 4473cr, INDSWFTLAB 1983cr, GANDHAR 2376cr, HONASA 15571cr, INDOBORAX 1285cr
+# Cache to avoid repeated yfinance calls for 500 stocks
+_market_cap_cache = {}
+
+def get_market_cap_cr(symbol: str) -> float:
+    """
+    Fetch market cap in crores for NSE symbol (e.g., PANAMAPET.NS -> 3054 cr)
+    Uses yfinance info/fast_info, cached. Returns None if not available.
+    """
+    # Normalize symbol
+    base = symbol.replace(".NS","").replace(".BO","").upper()
+    if base in _market_cap_cache:
+        return _market_cap_cache[base]
+    try:
+        import yfinance as yf
+        # Try with .NS suffix if not present
+        yf_sym = symbol if "." in symbol else symbol + ".NS"
+        t = yf.Ticker(yf_sym)
+        mc = None
+        # Try info
+        try:
+            mc = t.info.get("marketCap")
+        except:
+            pass
+        if mc is None:
+            try:
+                mc = t.fast_info.market_cap
+            except:
+                pass
+        if mc is None or mc == 0:
+            # Fallback: try without suffix
+            try:
+                t2 = yf.Ticker(base)
+                mc = t2.info.get("marketCap") or t2.fast_info.market_cap
+            except:
+                pass
+        if mc and mc > 0:
+            cr = float(mc) / 1e7  # 1 cr = 10,000,000
+            _market_cap_cache[base] = cr
+            return cr
+        _market_cap_cache[base] = None
+        return None
+    except Exception:
+        _market_cap_cache[base] = None
+        return None
+
+def check_market_cap_filter(symbol: str, max_cr: float = None, mode: str = None) -> dict:
+    """
+    Check if stock passes market cap filter per user request.
+    - max_cr: e.g., 5000 for <5000cr, 20000 to include HONASA (15571cr)
+    - mode: "BELOW_MAX" (default), "SMALLCAP_ONLY", "EITHER"
+    Returns dict with pass, market_cap_cr, reason.
+    If market cap not available, passes with warning (don't block due to data issue).
+    """
+    try:
+        from config import MARKET_CAP_FILTER_ENABLED, MARKET_CAP_MAX_CR, MARKET_CAP_FILTER_MODE
+        if max_cr is None:
+            max_cr = MARKET_CAP_MAX_CR
+        if mode is None:
+            mode = MARKET_CAP_FILTER_MODE
+        if not MARKET_CAP_FILTER_ENABLED or max_cr == 0 or max_cr is None:
+            return {"pass": True, "reason": "Market cap filter disabled", "market_cap_cr": None, "max_cr": max_cr, "mode": mode}
+    except:
+        max_cr = 5000
+        mode = "BELOW_MAX"
+        # If config not available, allow
+        return {"pass": True, "reason": "No config", "market_cap_cr": None}
+
+    mc_cr = get_market_cap_cr(symbol)
+    if mc_cr is None:
+        # If cannot fetch, don't block - pass with warning (avoid false negatives due to API)
+        return {"pass": True, "reason": "Market cap not available, skipped filter", "market_cap_cr": None, "max_cr": max_cr, "mode": mode, "warning": True}
+
+    # Check
+    if mode == "BELOW_MAX":
+        passed = mc_cr < max_cr
+        reason = f"Market cap {mc_cr:.0f} cr {'<' if passed else '>='} {max_cr} cr"
+    elif mode == "SMALLCAP_ONLY":
+        # For now, smallcap defined as <5000cr (NSE Smallcap 250 is roughly <7000cr). Use 7000 as proxy.
+        # Could also check against Nifty Smallcap list, but market cap <7000 is good proxy.
+        smallcap_threshold = 7000
+        passed = mc_cr < smallcap_threshold
+        reason = f"Market cap {mc_cr:.0f} cr {'<' if passed else '>='} {smallcap_threshold} cr (smallcap proxy)"
+    elif mode == "EITHER":
+        passed = mc_cr < max_cr  # Simplified: smallcap OR below max, both use <max for now
+        reason = f"Market cap {mc_cr:.0f} cr <{max_cr} cr"
+    else:
+        passed = mc_cr < max_cr
+        reason = f"Market cap {mc_cr:.0f} cr"
+
+    return {
+        "pass": bool(passed),
+        "market_cap_cr": float(mc_cr),
+        "max_cr": float(max_cr),
+        "mode": mode,
+        "reason": reason
+    }
