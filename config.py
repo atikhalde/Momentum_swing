@@ -89,7 +89,7 @@ CONTRACTION_BIG_DAYS = 15     # Big contraction window: 10-20 days consolidation
 CONTRACTION_BIG_CLUSTER_PCT = 0.15 # Big contraction cluster <15% (was 12%, now 15% to capture 11.45% + 14% cases)
 CONTRACTION_BIG_RANGE_FACTOR = 1.2 # Big candles can be slightly larger
 # Volume dried vs breakout (User: "after big breakout with volume there is contraction" — volume must be dried)
-VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.45 # Contraction avg volume <45% of breakout volume = dried (PANAMAPET 2.4% is well below)
+VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.30 # Contraction avg volume <30% of breakout volume = dried (was 45% too lenient for your 6 examples -> many false; PANAMAPET 1-6% well below 30%, YESBANK 29.8% now correctly filtered)
 BREAKOUT_VOLUME_MULTIPLIER = 2.0 # Breakout candle vol >2.0x Avg20 is considered big breakout with volume
 BREAKOUT_RANGE_MULTIPLIER = 1.5 # Breakout range >1.5x ATR is considered big breakout
 # Weekly pullback is now considered SAME as contraction/pullback per user: "you can consider contraction as pullback as well"
@@ -100,7 +100,7 @@ WEEKLY_PULLBACK_OPTIONAL_IF_DAILY_CONTRACTION = True
 # Video: The EDGE - "0.5 to 0.6 ke paas jo bhi contraction ban raha hai, uski possibility kaafi zyada hai"
 # STRICT video replication: REQUIRE_EDGE=True -> only contraction inside Fibo/52W will pass
 # PRACTICAL live scanner: REQUIRE_EDGE=False -> contraction + SMA is enough, edge is bonus scoring (recommended, gives more signals)
-REQUIRE_EDGE_FILTER = False  # Set True for 100% strict video mode (fewer signals, higher win rate). False for practical scanner (more signals)
+REQUIRE_EDGE_FILTER = True  # Changed per your feedback: True to filter false UNKNOWN edge stocks (was False -> 50 passes with 12 false UNKNOWN; now ~30-35 high-quality passes with dried volume)
 FIBO_LEVEL_LOW = 0.50
 FIBO_LEVEL_HIGH = 0.60
 FIBO_ZONE_TOLERANCE = 0.05   # Increased to 0.05 (5% of swing range) for practical tolerance (strict would be 0.02)
