@@ -1,2 +1,2 @@
 Total Trades,Win Rate %,Loss Rate %,Avg Win (Rs),Avg Loss (Rs),Avg Win %,Avg Loss %,Profit Factor,Payoff Ratio,Expectancy (Rs),Total PnL (Rs),Total Return %,CAGR %,Max Drawdown %,Avg Holding Days,Best Trade %,Worst Trade %,Years,Initial Capital,Final Equity,Video Expectation Match
-38,26.32,73.68,9344.65,-3657.65,6.12,-1.28,0.91,2.55,-235.99,-8967.65,-0.9,-0.63,-8.06,8.08,1995.0,-532.0,1.42,1000000,991032.35,Check - may need tuning
+5,40.0,60.0,7918.88,-4447.35,3.01,-1.95,1.19,1.78,499.14,2495.72,0.25,0.36,-1.0,10.4,498.0,-298.0,0.7,1000000,1002495.72,Check - may need tuning

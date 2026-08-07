@@ -79,11 +79,30 @@ python run_backtest.py --limit 30
 # Single stock backtest (video example)
 python run_backtest.py --symbol HINDCOPPER --period 5y
 
-# Outputs:
-# results/backtest/trades_5y.csv
-# results/backtest/metrics_5y.csv
-# results/backtest/equity_curve.png
-# results/backtest/summary.txt
+# Outputs (all auto-generated):
+# results/backtest/trades_5y.csv              # Full trade log (Symbol, Entry Date, Entry, SL, Target, Exit, PnL, Edge...)
+# results/backtest/metrics_5y.csv             # Summary metrics
+# results/backtest/equity_curve.png           # Equity curve chart
+# results/backtest/summary.txt                # Human-readable summary
+# results/backtest/backtest_report.pdf        # 📄 NEW: Professional PDF report (Symbol, Entry Date, Entry Price, SL, Target, PnL etc)
+# results/backtest/backtest_report_latest.pdf # Latest PDF (overwritten each run)
+# results/backtest/backtest_report_2026-08-07.pdf # Timestamped PDF
+```
+
+**📄 PDF Report (NEW):** After every `run_backtest.py`, a professional PDF is auto-generated showing:
+- **Header:** Period, universe size, capital, profitable/loss badge
+- **Executive Summary:** Win rate, Profit Factor, Payoff, Expectancy, Total PnL, Return, CAGR, Max DD, Best/Worst trade
+- **Equity Curve:** Chart embedded
+- **Strategy Config:** All video-mapped parameters (weekly, contraction, fibo, risk)
+- **Detailed Trades Log:** *Symbol | Entry Date | Entry Price | SL | Target RR6 | Target 15% | Exit Date | Exit Price | PnL (Rs) | PnL% | Holding Days | Edge | Exit Reason* — color-coded green/red, sorted by date, paginated
+- **Per-Symbol Summary:** Trades, wins, win rate, total PnL per symbol
+- **Footer:** Disclaimer & file locations
+
+Open with any PDF viewer. Also available as `results/backtest_single/` for single-stock runs.
+```bash
+# Single-stock PDF
+python run_backtest.py --symbol RELIANCE --period 2y
+# → results/backtest_single/backtest_report.pdf
 ```
 
 ---

@@ -40,7 +40,7 @@ def main():
     tester = SanuBacktester(initial_capital=args.capital, risk_per_trade=args.risk, verbose=True, force_yfinance=True)
 
     if args.symbol:
-        print(f"\n Backtesting SINGLE symbol: {args.symbol}")
+        print(f"\n Backtesting SINGLE symbol: {args.symbol} [yfinance ONLY]")
         trades = tester.backtest_symbol(args.symbol, period=args.period)
         if not trades:
             print(" No trades found for this symbol in period")
@@ -52,8 +52,14 @@ def main():
         print("\n Metrics:")
         for k,v in metrics.items():
             print(f"  {k}: {v}")
-        tester.save_results(df, metrics, out_dir="results/backtest_single")
+        tester.save_results(df, metrics, out_dir="results/backtest_single", period=args.period, universe_size=1)
         print("\n Saved to results/backtest_single/")
+        print("  - trades_5y.csv")
+        print("  - metrics_5y.csv")
+        print("  - equity_curve.png")
+        print("  - summary.txt")
+        print("  - backtest_report.pdf  <- NEW PDF with Symbol, Entry Date, Entry Price, SL, Target, PnL etc")
+        print("  - backtest_report_latest.pdf")
     else:
         universe = get_universe(limit=args.limit)
         print(f"\n Universe: {len(universe)} stocks")
@@ -75,12 +81,15 @@ def main():
         for k,v in metrics.items():
             print(f"  {k:20s}: {v}")
         
-        tester.save_results(df, metrics, out_dir="results/backtest")
+        tester.save_results(df, metrics, out_dir="results/backtest", period=args.period, universe_size=len(universe))
         print("\n Results saved to results/backtest/")
         print("  - trades_5y.csv")
         print("  - metrics_5y.csv")
         print("  - equity_curve.png")
         print("  - summary.txt")
+        print("  - backtest_report.pdf  <- NEW PDF with Symbol, Entry Date, Entry Price, SL, Target, PnL etc")
+        print("  - backtest_report_latest.pdf")
+        print("  - backtest_report_YYYY-MM-DD.pdf")
 
 if __name__ == "__main__":
     main()

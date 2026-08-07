@@ -528,7 +528,9 @@ class SanuBacktester:
         except Exception as e:
             logger.warning(f"Plot failed: {e}")
 
-    def save_results(self, trades_df: pd.DataFrame, metrics: dict, out_dir: str = "results/backtest"):
+    def save_results(self, trades_df: pd.DataFrame, metrics: dict, out_dir: str = "results/backtest", period: str = None, universe_size: int = None):
+        period = period or YFINANCE_PERIOD_BACKTEST
+        universe_size = universe_size or (len(trades_df["Symbol"].unique()) if not trades_df.empty and "Symbol" in trades_df else 0)
         os.makedirs(out_dir, exist_ok=True)
         trades_df.to_csv(os.path.join(out_dir, "trades_5y.csv"), index=False)
         pd.DataFrame([metrics]).to_csv(os.path.join(out_dir, "metrics_5y.csv"), index=False)
@@ -537,9 +539,45 @@ class SanuBacktester:
             f.write("Sanu Kumar Momentum Swing Strategy - 5 Year Backtest Summary\n")
             f.write("="*70 + "\n\n")
             f.write(f"Video: https://youtu.be/EgSuB9D-xAw\n")
-            f.write(f"Period: {YFINANCE_PERIOD_BACKTEST} (5 Years)\n")
-            f.write(f"Universe: Nifty 500\n\n")
+            f.write(f"Period: {period} (yfinance, Dhan never used for backtest)\n")
+            f.write(f"Universe: Nifty 500 ({universe_size} stocks tested)\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M IST')}\n\n")
             for k,v in metrics.items():
                 f.write(f"{k}: {v}\n")
         logger.info(f"Results saved to {out_dir}")
         self.plot_equity(trades_df, os.path.join(out_dir, "equity_curve.png"))
+        # --- Generate PDF Report (as requested: symbol, entry date, entry price, sl, target, p&l etc) ---
+        try:
+            from src.report_pdf import generate_backtest_pdf, generate_quick_pdf
+            equity_path = os.path.join(out_dir, "equity_curve.png")
+            # Generate timestamped + latest PDFs
+            # Use the comprehensive generator
+            from datetime import datetime as dt
+            date_str = dt.now().strftime("%Y-%m-%d")
+            # Single comprehensive PDF
+            pdf_path = os.path.join(out_dir, "backtest_report.pdf")
+            # Also dated and latest
+            try:
+                generate_backtest_pdf(
+                    trades_df=trades_df,
+                    metrics=metrics,
+                    equity_curve_path=equity_path if os.path.exists(equity_path) else None,
+                    output_path=pdf_path,
+                    period=period,
+                    universe_size=universe_size,
+                    capital=self.initial_capital
+                )
+                # Also generate timestamped + latest via helper
+                generate_quick_pdf(trades_df, metrics, equity_path, out_dir, period, universe_size, self.initial_capital)
+                logger.info(f"PDF Report generated: {pdf_path} + timestamped variants")
+            except Exception as e_pdf:
+                logger.warning(f"PDF generation failed for {pdf_path}: {e_pdf}")
+                # Fallback: try simple generation
+                try:
+                    generate_backtest_pdf(trades_df, metrics, equity_path, pdf_path, period, universe_size, self.initial_capital)
+                except Exception as e2:
+                    logger.error(f"PDF fallback also failed: {e2}")
+        except ImportError as e_imp:
+            logger.warning(f"reportlab not installed, skipping PDF generation: {e_imp}. Install with: pip install reportlab")
+        except Exception as e:
+            logger.warning(f"PDF generation error: {e}")

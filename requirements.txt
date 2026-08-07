@@ -16,5 +16,8 @@ dhanhq>=1.2.0
 tqdm>=4.64.0
 lxml>=4.9.0
 
+# PDF report generation (for backtest reports)
+reportlab>=4.0.0
+
 # For notebooks (optional)
 jupyter>=1.0.0

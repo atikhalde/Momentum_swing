@@ -12,9 +12,13 @@ results/backtest/*.png
 results/scanner/*.png
 .DS_Store
 
-# But keep scanner outputs (we want to commit latest scan)
+# But keep important outputs (we want to commit latest scan + PDF reports)
 !results/scanner/latest_scan.csv
 !results/scanner/latest_scan.html
+!results/backtest/*.pdf
+!results/backtest/*.png
+!results/backtest_single/*.pdf
+!results/backtest_single/*.png
 
 # Secrets
 .env
