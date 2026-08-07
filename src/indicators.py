@@ -17,6 +17,23 @@ import numpy as np
 def sma(series: pd.Series, period: int) -> pd.Series:
     return series.rolling(period, min_periods=period).mean()
 
+def ema(series: pd.Series, period: int) -> pd.Series:
+    # Exponential MA - more responsive than SMA, as you asked about EMA 20
+    return series.ewm(span=period, adjust=False, min_periods=period).mean()
+
+def get_ma(series: pd.Series, period: int, ma_type: str = None) -> pd.Series:
+    """Helper to get MA per config MA_TYPE (SMA or EMA)"""
+    if ma_type is None:
+        # Import here to avoid circular; default to config.MA_TYPE
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    if ma_type.upper() == "EMA":
+        return ema(series, period)
+    return sma(series, period)
+
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     high = df['High']
     low = df['Low']
@@ -28,13 +45,32 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.rolling(period, min_periods=period).mean()
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Add all indicators needed for strategy. Works for both weekly and daily df."""
+    """Add all indicators needed for strategy. Works for both weekly and daily df.
+    Computes BOTH SMA and EMA (so you can switch MA_TYPE instantly without re-fetch).
+    Video says SMA 20, but EMA 20 is also added because you asked about EMA 20.
+    """
     df = df.copy()
+    # SMA (video-faithful)
     df['SMA20'] = sma(df['Close'], 20)
     df['SMA10'] = sma(df['Close'], 10)
     df['SMA50'] = sma(df['Close'], 50)
+    # EMA (your question - alternative, more responsive)
+    df['EMA20'] = ema(df['Close'], 20)
+    df['EMA10'] = ema(df['Close'], 10)
+    df['EMA50'] = ema(df['Close'], 50)
+    # Generic MA aliases per config MA_TYPE for convenience
+    try:
+        from config import MA_TYPE
+        ma_type = MA_TYPE
+    except:
+        ma_type = "SMA"
+    # Also create MA20/MA10 per selected type for easier access
+    df['MA20'] = df[f'{ma_type}20']
+    df['MA10'] = df[f'{ma_type}10']
+    df['MA50'] = df[f'{ma_type}50']
     df['ATR14'] = atr(df, 14)
     df['VolumeSMA20'] = sma(df['Volume'], 20)
+    df['VolumeEMA20'] = ema(df['Volume'], 20)
     df['Range'] = df['High'] - df['Low']
     df['Body'] = (df['Close'] - df['Open']).abs()
     df['BodyPct'] = df['Body'] / df['Range'].replace(0, np.nan)
@@ -42,37 +78,50 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['Dist_52W_High_Pct'] = (df['52W_High'] - df['Close']) / df['52W_High']
     return df
 
-def is_uptrend_weekly(df_weekly: pd.DataFrame, sma_period: int = 20, lookback: int = 10) -> bool:
+def is_uptrend_weekly(df_weekly: pd.DataFrame, sma_period: int = 20, lookback: int = 10, ma_type: str = None) -> bool:
     """
     Video Rule 1: Stock must be in uptrend on Weekly.
-    Checks: Close > SMA20 and SMA20 not in sharp downtrend.
+    Checks: Close > MA20 and MA20 not in sharp downtrend.
+    Video says SMA 20 (transcript: "20 SMA laga lena hai") — but also supports EMA 20 as you asked.
     Example: Hindustan Copper weekly uptrend shown in video.
-    STRICT video would require SMA sloping up sharply, but we allow flat/slightly down SMA during pullback
-    as long as price is reclaiming SMA (typical pullback-to-SMA setup).
+    STRICT video would require MA sloping up sharply, but we allow flat/slightly down MA during pullback
+    as long as price is reclaiming MA (typical pullback-to-MA setup).
     """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    ma_col = f"{ma_type}{sma_period}"
+    ma50_col = f"{ma_type}50"
     if len(df_weekly) < sma_period + lookback:
         return False
     recent = df_weekly.tail(lookback)
     last_close = recent['Close'].iloc[-1]
-    last_sma = recent[f'SMA{sma_period}'].iloc[-1]
-    sma_10_ago = df_weekly[f'SMA{sma_period}'].iloc[-10] if len(df_weekly) >= 10 else last_sma
-    sma_20_ago = df_weekly[f'SMA{sma_period}'].iloc[-20] if len(df_weekly) >= 20 else last_sma
-    if pd.isna(last_sma) or pd.isna(sma_10_ago):
+    if ma_col not in df_weekly.columns:
+        # Fallback to SMA if MA not computed
+        ma_col = f"SMA{sma_period}"
+        ma50_col = "SMA50"
+    last_ma = recent[ma_col].iloc[-1]
+    ma_10_ago = df_weekly[ma_col].iloc[-10] if len(df_weekly) >= 10 else last_ma
+    ma_20_ago = df_weekly[ma_col].iloc[-20] if len(df_weekly) >= 20 else last_ma
+    if pd.isna(last_ma) or pd.isna(ma_10_ago):
         return False
-    # Price above SMA is main condition
-    if not (last_close > last_sma):
+    # Price above MA is main condition
+    if not (last_close > last_ma):
         return False
-    # SMA should not be in sharp downtrend: allow up to -3% decline over 5 weeks during pullback
+    # MA should not be in sharp downtrend: allow up to -3% decline over 5 weeks during pullback
     # Strict would be >0, relaxed allows -3% dip which happens during healthy pullbacks
-    sma_5_ago = recent[f'SMA{sma_period}'].iloc[-5] if len(recent) >=5 else sma_10_ago
-    if not pd.isna(sma_5_ago) and sma_5_ago != 0:
-        sma_slope_pct = (last_sma - sma_5_ago) / sma_5_ago
-        if sma_slope_pct < -0.03:  # More than 3% drop in 5 weeks = downtrend, reject
+    ma_5_ago = recent[ma_col].iloc[-5] if len(recent) >=5 else ma_10_ago
+    if not pd.isna(ma_5_ago) and ma_5_ago != 0:
+        ma_slope_pct = (last_ma - ma_5_ago) / ma_5_ago
+        if ma_slope_pct < -0.03:  # More than 3% drop in 5 weeks = downtrend, reject
             return False
-    # Also check longer term trend: SMA20 above SMA50 or price well above 50 SMA indicates overall uptrend
-    if 'SMA50' in df_weekly.columns and not pd.isna(recent['SMA50'].iloc[-1]):
-        # If SMA20 is significantly below SMA50, it's not uptrend
-        if last_sma < recent['SMA50'].iloc[-1] * 0.97:  # Allow 3% tolerance
+    # Also check longer term trend: MA20 above MA50 or price well above 50 MA indicates overall uptrend
+    if ma50_col in df_weekly.columns and not pd.isna(recent[ma50_col].iloc[-1]):
+        # If MA20 is significantly below MA50, it's not uptrend
+        if last_ma < recent[ma50_col].iloc[-1] * 0.97:  # Allow 3% tolerance
             return False
     # Alternative: check that 20-week high is not too far above current (i.e., not in 30% drawdown)
     high_20w = df_weekly['High'].tail(20).max()
@@ -110,34 +159,51 @@ def is_volume_expansion_on_upmove(df_weekly: pd.DataFrame, up_period: int = 10, 
     }
 
 def is_pullback_to_sma(df_weekly: pd.DataFrame, sma_period: int = 20, proximity_pct: float = 0.04, 
-                       lookback: int = 8) -> dict:
+                       lookback: int = 8, ma_type: str = None) -> dict:
     """
-    Video Rule 3: "20 SMA ke paas ek chota sa pullback aaya hua ho"
-    Checks if recent price pulled back to touch/near SMA.
+    Video Rule 3: "20 MA ke paas ek chota sa pullback aaya hua ho" (video says SMA, you asked EMA — both supported)
+    Checks if recent price pulled back to touch/near MA.
     """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    ma_col = f"{ma_type}{sma_period}"
     if len(df_weekly) < sma_period + 10:
         return {"is_pullback": False, "reason": "Not enough data"}
     recent = df_weekly.tail(lookback)
     last_close = recent['Close'].iloc[-1]
-    last_sma = recent[f'SMA{sma_period}'].iloc[-1]
-    if pd.isna(last_sma):
-        return {"is_pullback": False, "reason": "SMA NaN"}
-    dist_pct = abs(last_close - last_sma) / last_sma
+    if ma_col not in df_weekly.columns:
+        ma_col = f"SMA{sma_period}"
+    last_ma = recent[ma_col].iloc[-1]
+    if pd.isna(last_ma):
+        return {"is_pullback": False, "reason": f"{ma_type} NaN"}
+    dist_pct = abs(last_close - last_ma) / last_ma if last_ma != 0 else 1
     # Also check that there WAS a higher high before pullback
     high_before = df_weekly['High'].iloc[-lookback-10:-lookback].max() if len(df_weekly) > lookback+10 else df_weekly['High'].max()
     pulled_from_high = (high_before - last_close) / high_before if high_before else 0
-    is_near_sma = dist_pct <= proximity_pct
+    is_near_ma = dist_pct <= proximity_pct
     # Check that pullback is small 3-8 candles, not deep bear market
     is_small_pullback = pulled_from_high < 0.25  # Less than 25% pullback is small
-    # Price should have been above SMA before and now near it
-    was_above = (df_weekly['Close'].iloc[-15:-5] > df_weekly[f'SMA{sma_period}'].iloc[-15:-5]).any()
+    # Price should have been above MA before and now near it (respect MA_TYPE)
+    ma_col_full = ma_col  # e.g., SMA20 or EMA20
+    was_above = False
+    if ma_col_full in df_weekly.columns:
+        was_above = (df_weekly['Close'].iloc[-15:-5] > df_weekly[ma_col_full].iloc[-15:-5]).any()
+    else:
+        was_above = (df_weekly['Close'].iloc[-15:-5] > df_weekly[f'SMA{sma_period}'].iloc[-15:-5]).any()
     return {
-        "is_pullback": is_near_sma and is_small_pullback and was_above,
+        "is_pullback": is_near_ma and is_small_pullback and was_above,
         "dist_pct": dist_pct,
         "pulled_from_high_pct": pulled_from_high,
         "last_close": last_close,
-        "last_sma": last_sma,
-        "was_above": was_above
+        "last_sma": last_ma,  # keep key last_sma for backward compat, also add last_ma
+        "last_ma": last_ma,
+        "was_above": was_above,
+        "ma_type": ma_type,
+        "ma_col": ma_col
     }
 
 def is_volume_dry_on_pullback(df_weekly: pd.DataFrame, dry_threshold: float = 0.70, pullback_period: int = 4) -> dict:
@@ -314,47 +380,72 @@ def is_near_52w_high(df_daily: pd.DataFrame, threshold: float = 0.05) -> dict:
         "threshold": threshold
     }
 
-def check_daily_sma_proximity(df_daily: pd.DataFrame, sma_period: int = 20, proximity_pct: float = 0.03) -> dict:
+def check_daily_sma_proximity(df_daily: pd.DataFrame, sma_period: int = 20, proximity_pct: float = 0.03, ma_type: str = None) -> dict:
     """
-    Video: "Contraction 20 SMA ke paas hona chahiye"
+    Video: "Contraction 20 MA ke paas hona chahiye" (SMA per transcript, EMA per your question — both supported)
     """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    ma_col = f"{ma_type}{sma_period}"
     if len(df_daily) < sma_period:
         return {"near": False, "reason": "Not enough data"}
     last = df_daily.iloc[-1]
-    sma_val = last[f'SMA{sma_period}']
-    if pd.isna(sma_val):
-        return {"near": False, "reason": "SMA NaN"}
-    dist = abs(last['Close'] - sma_val) / sma_val
+    if ma_col not in df_daily.columns:
+        ma_col = f"SMA{sma_period}"
+    ma_val = last[ma_col]
+    if pd.isna(ma_val):
+        return {"near": False, "reason": f"{ma_type} NaN"}
+    dist = abs(last['Close'] - ma_val) / ma_val if ma_val !=0 else 1
     return {
         "near": bool(dist <= proximity_pct),
         "dist_pct": float(dist),
         "close": float(last['Close']),
-        "sma": float(sma_val)
+        "sma": float(ma_val),
+        "ma": float(ma_val),
+        "ma_type": ma_type,
+        "ma_col": ma_col
     }
 
-def get_market_filter_status(df_market_daily: pd.DataFrame, sma_period: int = 20) -> dict:
+def get_market_filter_status(df_market_daily: pd.DataFrame, sma_period: int = 20, ma_type: str = None) -> dict:
     """
-    Video: "CNX 500 agar 20 SMA se neeche aa gaya hai, Don't trade this setup"
-    Returns True if market is healthy (Close > SMA20)
+    Video: "CNX 500 agar 20 MA se neeche aa gaya hai, Don't trade this setup" (SMA per transcript, EMA per your question)
+    Returns True if market is healthy (Close > MA20)
     """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    ma_col = f"{ma_type}{sma_period}"
     if df_market_daily is None or len(df_market_daily) < sma_period + 5:
-        return {"healthy": True, "reason": "No market data, assuming healthy", "close": None, "sma": None}
+        return {"healthy": True, "reason": "No market data, assuming healthy", "close": None, "sma": None, "ma": None, "ma_type": ma_type}
     last = df_market_daily.iloc[-1]
-    sma_col = f'SMA{sma_period}'
-    if sma_col not in df_market_daily.columns:
-        df_market_daily[f'SMA{sma_period}'] = sma(df_market_daily['Close'], sma_period)
+    if ma_col not in df_market_daily.columns:
+        # Fallback: compute SMA if EMA not available, or vice versa
+        if ma_type == "EMA":
+            df_market_daily[ma_col] = ema(df_market_daily['Close'], sma_period)
+        else:
+            df_market_daily[ma_col] = sma(df_market_daily['Close'], sma_period)
         last = df_market_daily.iloc[-1]
     close = last['Close']
-    sma_val = last[sma_col]
-    if pd.isna(sma_val):
-        return {"healthy": True, "reason": "SMA NaN"}
-    healthy = close > sma_val
+    ma_val = last[ma_col]
+    if pd.isna(ma_val):
+        return {"healthy": True, "reason": f"{ma_type} NaN", "ma_type": ma_type}
+    healthy = close > ma_val
     return {
         "healthy": bool(healthy),
         "close": float(close),
-        "sma": float(sma_val),
-        "dist_pct": float((close - sma_val)/sma_val),
-        "reason": "Market above SMA - GOOD to trade" if healthy else "Market below SMA - AVOID trades"
+        "sma": float(ma_val),
+        "ma": float(ma_val),
+        "ma_type": ma_type,
+        "ma_col": ma_col,
+        "dist_pct": float((close - ma_val)/ma_val) if ma_val !=0 else 0,
+        "reason": f"Market above {ma_type} - GOOD to trade" if healthy else f"Market below {ma_type} - AVOID trades"
     }
 
 def calculate_entry_sl(contraction_high: float, contraction_low: float, 

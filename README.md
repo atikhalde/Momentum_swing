@@ -107,21 +107,31 @@ python run_backtest.py --symbol RELIANCE --period 2y
 
 ---
 
-## 🧠 Strategy Logic (Video Timestamp Mapping)
+## 🧠 Strategy Logic (Video Timestamp Mapping) — All Factors Covered ✅
 
-| Step | Timeframe | Rule (Hindi + English) | Config |
-|------|-----------|------------------------|--------|
-| 1 | Weekly | **Uptrend** — Close > 20 SMA, SMA rising | `WEEKLY_TREND_SMA=20` |
-| 2 | Weekly | **Volume expansion** on up move (`Volume badhne chahiye`) | `VOLUME_EXPANSION_THRESHOLD` |
-| 3 | Weekly | **Pullback** 3-4 candles to 20 SMA (`chota pullback 20 SMA ke paas`) | `PULLBACK_CANDLES 3-4, proximity 4%` |
-| 4 | Weekly | **Volume dry** on pullback (`volumes flat/dry ho gaya`) — sellers weak | `VOLUME_DRY_THRESHOLD=0.70` |
-| 5 | Daily | **Contraction** — 2-4 small inside candles, tight range <2.5% (`chote chote inside candles`) | `CONTRACTION_*` |
-| 6 | Daily | **SMA proximity** — Contraction near Daily 20 SMA | `DAILY_SMA_PROXIMITY 3%` |
-| 7 | Daily | **FIBO EDGE** — Contraction inside 0.5-0.6 of pullback swing (`0.5-0.6 ke paas contraction`) | `FIBO 0.5-0.6` |
-| 8 | Daily | **52W High EDGE** — Within 5% of 52W high | `NEAR_52W_THRESHOLD=5%` |
-| 9 | Entry | **Entry** above contraction high +0.2%, **SL** below low -0.2%, risk 2.5-3.5% | `ENTRY_BUFFER, STOP_BUFFER` |
-| 10 | Exit | **50% at 15-20%**, **50% trail with 10 SMA close below** (`10 SMA se trail karo`) | `TARGET 15%, TRAILING_SMA=10` |
-| 11 | Filter | **CNX500 >20 SMA** else DON'T trade (`CNX500 20 SMA se neeche -> trade mat karo`) | `MARKET_FILTER_SMA=20` |
+**All 4 Pillars from Video + Every Rule is coded in `config.py` + `src/indicators.py`:**
+
+> **Pillar 1: Volume Analysis | Pillar 2: Trend | Pillar 3: SMA/EMA | Pillar 4: Fibo 0.5-0.6 Edge**
+
+| Step | Timeframe | Rule (Hindi + English as in Video) | Config Param | Code Location |
+|------|-----------|-------------------------------------|--------------|---------------|
+| 1 | Weekly | **Uptrend** — Close > 20 **MA** (`20 SMA pe stock uptrend me hona chahiye` — transcript says SMA, you asked EMA 20, we support BOTH via `MA_TYPE`) | `MA_TYPE="SMA"` (default video-faithful) / set `"EMA"` for EMA 20, `WEEKLY_TREND_MA=20` | `indicators.py:is_uptrend_weekly()` |
+| 1b | Weekly | **Alternative 10 MA** — Aggressive fast momentum (`10 SMA bhi use kar sakte ho`) | `WEEKLY_TREND_MA_ALT=10` | `strategy.py:check_weekly_setup()` |
+| 2 | Weekly | **Volume expansion** on up move (`Jab upar ja raha hai toh volumes bhi aane chahiye`) | `VOLUME_UP_PERIOD=10, THRESHOLD=1.2` | `is_volume_expansion_on_upmove()` |
+| 3 | Weekly | **Pullback** 3-4 candles to 20 MA (`chota pullback 20 SMA ke paas aaya hua ho`) | `PULLBACK_CANDLES 3-4, proximity 7%` | `is_pullback_to_sma()` |
+| 4 | Weekly | **Volume dry** on pullback (`volumes flat/dry ho gaya — sellers weak, profit booking only`) | `VOLUME_DRY_THRESHOLD=0.90, PERIOD=4` | `is_volume_dry_on_pullback()` |
+| 5 | Daily | **Contraction** — 2-4 small inside candles, tight range (`chote chote inside candles jab ek zone pe form hote he`) = Small range <1.0×ATR + Small body <60% + Cluster <4.5% + ≥1 inside bar + Volume dry | `CONTRACTION_DAYS=3, RANGE_FACTOR=1.0, BODY=0.60, CLUSTER=4.5%, INSIDE=1` | `detect_contraction()` |
+| 6 | Daily | **MA proximity** — Contraction near Daily 20 MA (`20 SMA ke paas hona chahiye` — supports EMA 20 too) | `DAILY_MA_ENTRY=20, PROXIMITY=5%` | `check_daily_sma_proximity()` |
+| 7 | Daily | **FIBO EDGE 1** — Contraction inside 0.5-0.6 of pullback swing (`pure zone ka upar se neeche Fibo lagao, 0.5-0.6 mark karo — 0.5 ke baad short covering start`) | `FIBO 0.5-0.6, TOLERANCE=5%, LOOKBACK=30` | `get_fibonacci_zone(), is_contraction_in_fibo_zone()` |
+| 8 | Daily | **52W High EDGE 2** — Within 8% of 52W high (`jo bhi stock 52 week high ke paas formation kar raha hai`) | `NEAR_52W_HIGH_THRESHOLD=8%` | `is_near_52w_high()` |
+| 9 | Daily | **Entry** above contraction high +0.2%, **SL** below low -0.2%, risk 2.5-3.5% on chart (`contraction ke upar entry, neeche SL`) | `ENTRY_BUFFER 0.2%, STOP_BUFFER 0.2%, REJECT >6%` | `calculate_entry_sl()` |
+| 10 | Exit | **50% at 15-20%**, **50% trail with 10 MA close below** (`50% quantity 15-20% pe book, baki 10 SMA se trail, jaise hi 10 SMA ke neeche close aaye exit`) | `TARGET 15%/20%, RR 1:6, TRAILING_MA=10` | `backtest.py` trailing logic |
+| 11 | Filter | **CNX500 >20 MA** else DON'T trade (`CNX500 20 SMA se neeche aa gaya hai, Don't trade this setup`) — respects `MA_TYPE` | `MARKET_FILTER_MA=20` | `get_market_filter_status()` |
+| 12 | Risk | **Max 1% per trade** (`1% se zyada risk mat lo — 0.5% recommended, 0.2-0.3% for beginners`) | `RISK_PER_TRADE 0.5%, MAX 1%` | `backtest.py` position sizing |
+
+**Expected per video:** Win rate 40-50% (50-60% SL hits), but 1 winner (RR 1:6) covers 5-6 losers. `200 Rs loss 5 times, 1 time 20-30 Rs profit`.
+
+**Q: SMA 20 vs EMA 20?** Video transcript says **SMA 20** verbatim (`20 SMA laga lena hai`, `10 SMA fast momentum`), so default `MA_TYPE="SMA"` is 100% faithful. But you asked about **EMA 20** — EMA is exponential (more responsive). Our code computes **BOTH** `SMA20/EMA20, SMA10/EMA10, SMA50/EMA50` + `MA20/MA10/MA50` aliases, so just set `config.py: MA_TYPE = "EMA"` to instantly switch entire strategy (weekly trend, pullback, daily proximity, trailing, market filter) to EMA without re-fetch. Example: `MA_TYPE="EMA"` makes Weekly Uptrend = Close > EMA20, Pullback to EMA20, Contraction near EMA20, Trail with EMA10, CNX500 > EMA20.
 
 **Expected per video:** Win rate 40-50% (50-60% SL hits), but 1 winner (RR 1:6) covers 5-6 losers. `200 Rs loss 5 times, 1 time 20-30 Rs profit`.
 

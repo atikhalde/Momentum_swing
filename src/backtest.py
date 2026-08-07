@@ -223,10 +223,18 @@ class SanuBacktester:
                         # Continue holding remaining 50%
                         # No exit yet
                     
-                    # Check trailing exit: Close below 10 SMA (Video: "Jaise hi 10 SMA ke neeche closing aaye book your 100% quantity")
-                    # Only after partial booked? Actually video says trail remaining 50% with 10 SMA. We'll check always but require at least 3 days holding
+                    # Check trailing exit: Close below 10 MA (Video: "Jaise hi 10 SMA ke neeche closing aaye book your 100% quantity" — supports SMA or EMA per MA_TYPE)
+                    # Only after partial booked? Actually video says trail remaining 50% with 10 MA. We'll check always but require at least 3 days holding
                     if current_trade.holding_days >= MIN_HOLDING_DAYS:
-                        sma10 = today['SMA10']
+                        # Use MA_TYPE aware column (SMA10 or EMA10) — video says SMA 10 but EMA also works as you asked
+                        try:
+                            from config import MA_TYPE
+                            ma_trail_col = f"{MA_TYPE}10"
+                        except:
+                            ma_trail_col = "SMA10"
+                        if ma_trail_col not in today.index:
+                            ma_trail_col = "SMA10"
+                        sma10 = today[ma_trail_col]
                         if not pd.isna(sma10) and today['Close'] < sma10:
                             # Exit remaining 50% (or 100% if not yet partial)
                             remaining_qty = current_trade.quantity * (0.5 if current_trade.partial_booked else 1)
@@ -295,7 +303,14 @@ class SanuBacktester:
                         mkt_slice = df_market.loc[:today_date]
                         if len(mkt_slice) >= 20:
                             mkt_close = mkt_slice['Close'].iloc[-1]
-                            mkt_sma = mkt_slice['SMA20'].iloc[-1]
+                            try:
+                                from config import MA_TYPE
+                                mkt_col = f"{MA_TYPE}20"
+                            except:
+                                mkt_col = "SMA20"
+                            if mkt_col not in mkt_slice.columns:
+                                mkt_col = "SMA20"
+                            mkt_sma = mkt_slice[mkt_col].iloc[-1]
                             if not pd.isna(mkt_sma) and mkt_close < mkt_sma:
                                 if MARKET_FILTER_STRICT:
                                     continue

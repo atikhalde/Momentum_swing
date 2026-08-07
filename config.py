@@ -28,9 +28,16 @@ DAILY_TIMEFRAME = "D"
 # ==================== WEEKLY SETUP RULES ====================
 # Video Chapter: Weekly Selection Criteria (approx 08:30 - 12:00)
 
+# MA Type: Video transcript says "20 SMA laga lena hai, 10 SMA fast momentum" — so default is SMA (faithful to video)
+# BUT you asked about EMA 20 — EMA is exponential, more responsive. Both are valid. Change to "EMA" if you prefer EMA 20.
+MA_TYPE = "SMA"              # Options: "SMA" (video-faithful, per transcript) or "EMA" (alternative, your question)
+# Note: Code computes BOTH SMA20/EMA20, EMA10/EMA10, SMA50/EMA50 — so you can switch instantly without re-fetch
+
 # Rule 1: Trend - Stock must be in clear UPTREND on Weekly
-WEEKLY_TREND_SMA = 20        # Video: 20 SMA pe stock uptrend me hona chahiye. Aggressive log 10 SMA bhi use kar sakte he
-WEEKLY_TREND_SMA_ALT = 10    # Alternative for fast momentum traders - mentioned as option
+WEEKLY_TREND_MA = 20        # Video: 20 MA pe stock uptrend me hona chahiye. Aggressive log 10 MA bhi use kar sakte he
+WEEKLY_TREND_MA_ALT = 10    # Alternative for fast momentum traders - mentioned as option (10 SMA/EMA)
+WEEKLY_TREND_SMA = 20        # Kept for backward compat (alias)
+WEEKLY_TREND_SMA_ALT = 10    # Kept for backward compat
 WEEKLY_TREND_CHECK_LOOKBACK = 20 # Stock should be above 20 SMA for last N weeks
 
 # Rule 2: Volume on Up Move
@@ -54,8 +61,10 @@ VOLUME_DRY_PERIOD = 4        # Last 3-4 weeks pullback volume
 # ==================== DAILY SETUP RULES ====================
 # Video Chapter: Daily Contraction Search (12:00 - 16:00)
 
-DAILY_SMA_ENTRY = 20         # Contraction 20 SMA ke paas hona chahiye
-DAILY_SMA_TRAIL = 10         # Trailing with 10 SMA on Daily
+DAILY_MA_ENTRY = 20         # Contraction 20 MA ke paas hona chahiye (SMA or EMA per MA_TYPE)
+DAILY_MA_TRAIL = 10         # Trailing with 10 MA on Daily (SMA or EMA)
+DAILY_SMA_ENTRY = 20         # Kept for backward compat (alias)
+DAILY_SMA_TRAIL = 10         # Kept for backward compat
 DAILY_SMA_PROXIMITY_PCT = 0.05 # Daily close within 5% of Daily 20 SMA (video says near; 3% too tight)
 
 # Contraction Definition
@@ -109,12 +118,14 @@ MIN_HOLDING_DAYS = 3
 # ==================== MARKET REGIME FILTER ====================
 # Video: "Agar CNX 500 apne 10 SMA ya 20 SMA se neeche trade kar raha hai toh setup trade mat karo"
 # Transcript at ~17:30: "CNX 500 agar 20 SMA se neeche aa gaya hai, Don't trade this setup"
+# User asked about EMA 20 — this filter also respects MA_TYPE (SMA or EMA)
 MARKET_INDEX_SYMBOL_YFINANCE = "^CRSLDX"  # Nifty 500 proxy - yfinance has no perfect CNX500, fallback
 MARKET_INDEX_SYMBOL_DHAN = "NIFTY 500"   # Dhan symbol
 MARKET_INDEX_ALTERNATIVES = ["^NSEI", "^BSESN", "NIFTY_500", "CNX500", "^CRSLDX"]
-MARKET_FILTER_SMA = 20
+MARKET_FILTER_MA = 20
+MARKET_FILTER_SMA = 20 # Kept for backward compat
 MARKET_FILTER_ENABLED = True
-MARKET_FILTER_STRICT = False  # If True, strictly block all trades when below SMA. If False, just warn
+MARKET_FILTER_STRICT = False  # If True, strictly block all trades when below MA. If False, just warn
 
 # ==================== UNIVERSE ====================
 # Video focuses on Swing/Momentum stocks - Typically Nifty 500
