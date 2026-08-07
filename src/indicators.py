@@ -303,6 +303,168 @@ def detect_contraction(df_daily: pd.DataFrame, contraction_days: int = 3,
         "details": f"RangeOK:{small_range_ok} BodyOK:{small_body_ok} Tight:{cluster_tight}({cluster_range_pct:.2%}) Inside:{inside_count} VolDry:{vol_dry}"
     }
 
+def detect_contraction_flexible(df_daily: pd.DataFrame, ma_type: str = None) -> dict:
+    """
+    Flexible contraction detection per user feedback 2026-08-08:
+    - Your examples: PANAMAPET small 5-day (11-17 June, 5.41% cluster) and big 24-day (23 June-17 July, 11.45% cluster) both are valid
+    - Previous strict 4.5% failed small 5.41% case. Now we support BOTH small (3-6 days tight <6%) AND big (10-20 days tight <12%)
+    - Also "you can consider contraction as pullback as well" — so big contraction is valid pullback
+    Returns dict with is_contraction True if EITHER small or big passes, plus details.
+    """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE
+            ma_type = MA_TYPE
+        except:
+            ma_type = "SMA"
+    try:
+        from config import (CONTRACTION_DAYS, CONTRACTION_RANGE_FACTOR, CONTRACTION_BODY_FACTOR, CONTRACTION_CLUSTER_PCT, CONTRACTION_INSIDE_BAR_REQUIRED,
+                            CONTRACTION_BIG_DAYS, CONTRACTION_BIG_CLUSTER_PCT, CONTRACTION_BIG_RANGE_FACTOR)
+    except:
+        CONTRACTION_DAYS, CONTRACTION_RANGE_FACTOR, CONTRACTION_BODY_FACTOR, CONTRACTION_CLUSTER_PCT, CONTRACTION_INSIDE_BAR_REQUIRED = 3, 1.0, 0.60, 0.06, 1
+        CONTRACTION_BIG_DAYS, CONTRACTION_BIG_CLUSTER_PCT, CONTRACTION_BIG_RANGE_FACTOR = 15, 0.12, 1.2
+
+    # Try small contraction first (3 days)
+    small = detect_contraction(df_daily, CONTRACTION_DAYS, CONTRACTION_RANGE_FACTOR, CONTRACTION_BODY_FACTOR, CONTRACTION_CLUSTER_PCT, CONTRACTION_INSIDE_BAR_REQUIRED)
+    if small["is_contraction"]:
+        small["type"] = "SMALL"
+        small["days"] = CONTRACTION_DAYS
+        return small
+    # Try alt small (5 days)
+    small_alt = detect_contraction(df_daily, 5, CONTRACTION_RANGE_FACTOR, CONTRACTION_BODY_FACTOR, CONTRACTION_CLUSTER_PCT, CONTRACTION_INSIDE_BAR_REQUIRED)
+    if small_alt["is_contraction"]:
+        small_alt["type"] = "SMALL-5D"
+        small_alt["days"] = 5
+        return small_alt
+    # Try big contraction (15 days) with looser cluster
+    big = detect_contraction(df_daily, CONTRACTION_BIG_DAYS, CONTRACTION_BIG_RANGE_FACTOR, 0.65, CONTRACTION_BIG_CLUSTER_PCT, 2)
+    if big["is_contraction"]:
+        big["type"] = "BIG"
+        big["days"] = CONTRACTION_BIG_DAYS
+        return big
+    # Try big 10 days
+    big10 = detect_contraction(df_daily, 10, CONTRACTION_BIG_RANGE_FACTOR, 0.65, CONTRACTION_BIG_CLUSTER_PCT, 2)
+    if big10["is_contraction"]:
+        big10["type"] = "BIG-10D"
+        big10["days"] = 10
+        return big10
+    # Try 20 days extreme big
+    big20 = detect_contraction(df_daily, 20, CONTRACTION_BIG_RANGE_FACTOR, 0.70, 0.15, 2)
+    if big20["is_contraction"]:
+        big20["type"] = "BIG-20D"
+        big20["days"] = 20
+        return big20
+    # If none pass, return small's details (most strict) but mark as not contraction
+    small["type"] = "NONE"
+    small["days"] = CONTRACTION_DAYS
+    return small
+
+def find_prior_breakout(df_daily: pd.DataFrame, lookback: int = 30) -> dict:
+    """
+    Find most RECENT big breakout with volume BEFORE contraction (not max volume over 30 days).
+    User: "after big breakout with volume there is contraction" — e.g., PANAMAPET 10 June vol 14x, NRBBEARING 8 May, HONASA 22 May
+    Previously we picked max volume over 30 days (e.g., April 17) — now we pick MOST RECENT breakout within last 15 days before contraction, which correctly finds 8 May for NRBBEARING etc.
+    Looks back for candle with Vol > BREAKOUT_VOLUME_MULTIPLIER * VolumeSMA20 and Range > BREAKOUT_RANGE_MULTIPLIER * ATR, picks most recent.
+    """
+    try:
+        from config import BREAKOUT_VOLUME_MULTIPLIER, BREAKOUT_RANGE_MULTIPLIER
+    except:
+        BREAKOUT_VOLUME_MULTIPLIER, BREAKOUT_RANGE_MULTIPLIER = 2.0, 1.5
+    if len(df_daily) < 15:
+        return {"found": False, "reason": "Not enough data"}
+    # Need VolumeSMA20 and ATR
+    if "VolumeSMA20" not in df_daily.columns:
+        df_daily["VolumeSMA20"] = df_daily["Volume"].rolling(20).mean()
+    if "ATR14" not in df_daily.columns:
+        df_daily["ATR14"] = atr(df_daily, 14)
+    # Look at last 20 days excluding last 3 days (contraction itself), and find MOST RECENT breakout
+    # Iterate from most recent backwards, return first that matches
+    window = df_daily.tail(lookback).iloc[:-3]  # Exclude last 3 days (contraction)
+    # Iterate reversed (most recent first)
+    for idx in reversed(window.index):
+        row = window.loc[idx]
+        vol = row["Volume"]
+        avg = row["VolumeSMA20"]
+        atr_val = row["ATR14"]
+        rng = row["High"] - row["Low"]
+        if pd.isna(avg) or pd.isna(atr_val) or avg ==0 or atr_val==0:
+            continue
+        vol_ratio = vol / avg
+        range_ratio = rng / atr_val
+        if vol_ratio >= BREAKOUT_VOLUME_MULTIPLIER and range_ratio >= BREAKOUT_RANGE_MULTIPLIER:
+            # Found most recent breakout
+            return {
+                "found": True,
+                "date": idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+                "vol_ratio": float(vol_ratio),
+                "range_ratio": float(range_ratio),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+            }
+    # Fallback: try with slightly lower threshold (1.5x vol) for less explosive breakouts like HONASA
+    for idx in reversed(window.index):
+        row = window.loc[idx]
+        vol = row["Volume"]
+        avg = row["VolumeSMA20"]
+        atr_val = row["ATR14"]
+        rng = row["High"] - row["Low"]
+        if pd.isna(avg) or pd.isna(atr_val) or avg ==0 or atr_val==0:
+            continue
+        vol_ratio = vol / avg
+        range_ratio = rng / atr_val
+        if vol_ratio >= 1.5 and range_ratio >= 1.2:
+            return {
+                "found": True,
+                "date": idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+                "vol_ratio": float(vol_ratio),
+                "range_ratio": float(range_ratio),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+            }
+    return {"found": False, "reason": f"No recent breakout with vol >{BREAKOUT_VOLUME_MULTIPLIER}x in last {lookback} days"}
+
+def is_volume_dried_vs_breakout(df_daily: pd.DataFrame, contraction_days: int = 5) -> dict:
+    """
+    Check if contraction volume is dried vs prior breakout volume.
+    User: "after big breakout with volume there is contraction" — contraction vol should be dried.
+    Compares avg vol of last contraction_days vs breakout vol found.
+    """
+    try:
+        from config import VOLUME_DRIED_VS_BREAKOUT_RATIO
+    except:
+        VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.45
+    breakout = find_prior_breakout(df_daily, lookback=30)
+    if not breakout["found"]:
+        # If no clear breakout found, fallback to vs 20-day avg (previous logic)
+        if len(df_daily) < contraction_days+20:
+            return {"dried": False, "reason": "Not enough data", "fallback": True}
+        last_n = df_daily.tail(contraction_days)
+        avg_vol_contraction = last_n["Volume"].mean()
+        avg_vol_prior = df_daily["Volume"].iloc[-20:-contraction_days].mean()
+        dried = avg_vol_contraction < avg_vol_prior * 0.85 if avg_vol_prior>0 else True
+        return {"dried": bool(dried), "avg_contraction": float(avg_vol_contraction), "avg_prior": float(avg_vol_prior), "ratio": float(avg_vol_contraction/avg_vol_prior) if avg_vol_prior else 0, "breakout": None, "fallback": True}
+    # Compare contraction avg vs breakout vol
+    last_n = df_daily.tail(contraction_days)
+    avg_contraction = last_n["Volume"].mean()
+    breakout_vol = breakout["volume"]
+    ratio = avg_contraction / breakout_vol if breakout_vol else 1
+    dried = ratio < VOLUME_DRIED_VS_BREAKOUT_RATIO
+    return {
+        "dried": bool(dried),
+        "avg_contraction": float(avg_contraction),
+        "breakout_vol": float(breakout_vol),
+        "breakout_date": breakout["date"],
+        "breakout_ratio": float(breakout["vol_ratio"]),
+        "ratio": float(ratio),
+        "threshold": VOLUME_DRIED_VS_BREAKOUT_RATIO,
+        "breakout": breakout,
+        "fallback": False
+    }
+
 def get_fibonacci_zone(df_daily: pd.DataFrame, lookback: int = 60, fib_low: float = 0.50, fib_high: float = 0.60) -> dict:
     """
     Video Edge 1: "Pure zone ka upar se leke neeche low tak Fibo lagao, 0.5 to 0.6 level ko mark kar lo"
@@ -383,7 +545,69 @@ def is_near_52w_high(df_daily: pd.DataFrame, threshold: float = 0.05) -> dict:
 def check_daily_sma_proximity(df_daily: pd.DataFrame, sma_period: int = 20, proximity_pct: float = 0.03, ma_type: str = None) -> dict:
     """
     Video: "Contraction 20 MA ke paas hona chahiye" (SMA per transcript, EMA per your question — both supported)
+    Updated per user feedback 2026-08-08: Now checks BOTH 10 and 20 (it does not necessary on sma 20 only, sometimes its on sma 10 as well)
+    If DAILY_MA_CHECK_BOTH=True, pass if near EITHER 10 or 20.
     """
+    if ma_type is None:
+        try:
+            from config import MA_TYPE, DAILY_MA_CHECK_BOTH, DAILY_MA10_PROXIMITY_PCT, DAILY_MA20_PROXIMITY_PCT
+            if DAILY_MA_CHECK_BOTH:
+                # Check both 10 and 20, pass if either is near
+                prox10 = DAILY_MA10_PROXIMITY_PCT
+                prox20 = DAILY_MA20_PROXIMITY_PCT
+                # Try MA10
+                ma10_col = f"{ma_type}10"
+                ma20_col = f"{ma_type}20"
+                if len(df_daily) < 10:
+                    return {"near": False, "reason": "Not enough data"}
+                last = df_daily.iloc[-1]
+                if ma10_col not in df_daily.columns:
+                    ma10_col = "SMA10"
+                if ma20_col not in df_daily.columns:
+                    ma20_col = "SMA20"
+                val10 = last[ma10_col]
+                val20 = last[ma20_col]
+                dist10 = abs(last['Close'] - val10) / val10 if pd.notna(val10) and val10!=0 else 1
+                dist20 = abs(last['Close'] - val20) / val20 if pd.notna(val20) and val20!=0 else 1
+                near10 = dist10 <= prox10 if pd.notna(val10) else False
+                near20 = dist20 <= prox20 if pd.notna(val20) else False
+                near = near10 or near20
+                # Determine which MA is closer
+                if near10 and near20:
+                    which = "BOTH 10 & 20"
+                    dist = min(dist10, dist20)
+                    ma_val = val10 if dist10 < dist20 else val20
+                elif near10:
+                    which = "SMA10" if ma_type=="SMA" else "EMA10"
+                    dist = dist10
+                    ma_val = val10
+                elif near20:
+                    which = "SMA20" if ma_type=="SMA" else "EMA20"
+                    dist = dist20
+                    ma_val = val20
+                else:
+                    which = "NONE"
+                    dist = min(dist10, dist20)
+                    ma_val = val10
+                return {
+                    "near": bool(near),
+                    "dist_pct": float(dist),
+                    "dist10_pct": float(dist10),
+                    "dist20_pct": float(dist20),
+                    "near10": bool(near10),
+                    "near20": bool(near20),
+                    "which": which,
+                    "close": float(last['Close']),
+                    "sma": float(ma_val) if pd.notna(ma_val) else None,
+                    "ma": float(ma_val) if pd.notna(ma_val) else None,
+                    "ma_type": ma_type,
+                    "ma_col": ma10_col if near10 else ma20_col
+                }
+        except ImportError:
+            pass
+        except Exception:
+            pass
+    # Fallback: single MA check (original)
     if ma_type is None:
         try:
             from config import MA_TYPE
@@ -407,7 +631,8 @@ def check_daily_sma_proximity(df_daily: pd.DataFrame, sma_period: int = 20, prox
         "sma": float(ma_val),
         "ma": float(ma_val),
         "ma_type": ma_type,
-        "ma_col": ma_col
+        "ma_col": ma_col,
+        "which": ma_col
     }
 
 def get_market_filter_status(df_market_daily: pd.DataFrame, sma_period: int = 20, ma_type: str = None) -> dict:

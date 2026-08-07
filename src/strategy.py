@@ -16,9 +16,10 @@ from datetime import datetime
 
 from src.indicators import (
     add_indicators, is_uptrend_weekly, is_volume_expansion_on_upmove,
-    is_pullback_to_sma, is_volume_dry_on_pullback, detect_contraction,
+    is_pullback_to_sma, is_volume_dry_on_pullback, detect_contraction, detect_contraction_flexible,
     get_fibonacci_zone, is_contraction_in_fibo_zone, is_near_52w_high,
-    check_daily_sma_proximity, get_market_filter_status, calculate_entry_sl
+    check_daily_sma_proximity, get_market_filter_status, calculate_entry_sl,
+    is_volume_dried_vs_breakout, find_prior_breakout
 )
 from src.data_provider import get_provider
 from config import *
@@ -127,26 +128,35 @@ class SanuMomentumStrategy:
         }
 
     def check_daily_setup(self, df_daily: pd.DataFrame, df_weekly: pd.DataFrame = None) -> dict:
-        """Check daily contraction + edge filters"""
+        """Check daily contraction + edge filters — UPDATED per user feedback 2026-08-08"""
         if df_daily is None or df_daily.empty or len(df_daily) < 30:
             return {"pass": False, "reason": "Not enough daily data", "edge": None}
         
         df_daily = add_indicators(df_daily)
         
-        # Check Daily SMA proximity
+        # Check Daily MA proximity (now checks BOTH 10 and 20 per user: "sometimes its on sma 10 as well")
         sma_prox = check_daily_sma_proximity(df_daily, DAILY_SMA_ENTRY, DAILY_SMA_PROXIMITY_PCT)
         
-        # Detect Contraction
-        contraction = detect_contraction(df_daily, CONTRACTION_DAYS, CONTRACTION_RANGE_FACTOR, 
-                                         CONTRACTION_BODY_FACTOR, CONTRACTION_CLUSTER_PCT, 
-                                         CONTRACTION_INSIDE_BAR_REQUIRED)
+        # Detect Contraction — FLEXIBLE (small 3-5 days OR big 10-20 days) per user: "it could be small or big"
+        # User examples: PANAMAPET small 5-day (5.41%) and big 24-day (11.45%) both valid
+        contraction = detect_contraction_flexible(df_daily)
+        
+        # Volume dried vs breakout check (user: "after big breakout with volume there is contraction" — volume must be dried)
+        vol_dried = is_volume_dried_vs_breakout(df_daily, contraction_days=contraction.get("days", 5) if contraction.get("is_contraction") else 5)
         
         if not contraction["is_contraction"]:
+            vol_ratio = vol_dried.get('ratio',0)
+            thr = vol_dried.get('threshold',0.45)
+            if not vol_dried.get("dried"):
+                reason_msg = f"No contraction: {contraction['details']} | Vol not dried vs breakout: {vol_ratio:.1%} (need <{thr:.0%})"
+            else:
+                reason_msg = f"No contraction: {contraction['details']}"
             return {
                 "pass": False,
-                "reason": f"No contraction: {contraction['details']}",
+                "reason": reason_msg,
                 "contraction": contraction,
-                "sma_proximity": sma_prox
+                "sma_proximity": sma_prox,
+                "vol_dried": vol_dried
             }
         
         # Fibo Zone
@@ -165,15 +175,22 @@ class SanuMomentumStrategy:
         
         # Also require SMA proximity for high quality
         # Video: contraction should be near 20 SMA - we allow slight tolerance if edge is strong
+        # Updated per user: "it does not necessary on sma 20 only, sometimes its on sma 10 as well" — now checks BOTH via check_daily_sma_proximity
         sma_ok = sma_prox["near"] or in_fibo  # If in fibo, SMA proximity less strict
         
-        # Determine if daily passes: STRICT mode requires edge, PRACTICAL requires only contraction + SMA
+        # Volume dried is KEY per user feedback: "important factor you ignored about the dried volume"
+        # Must have dried volume vs breakout (e.g., PANAMAPET contraction 2-3% of breakout vol)
+        vol_ok = vol_dried.get("dried", True)  # If no breakout found, fallback to prior avg check
+        
+        # Determine if daily passes: STRICT mode requires edge, PRACTICAL requires only contraction + SMA + vol dried
+        # User: "contraction as pullback as well" — contraction IS the pullback, so vol dried is essential
         if REQUIRE_EDGE_FILTER:
             # 100% video strict replication
-            daily_pass = contraction["is_contraction"] and has_edge and sma_ok
+            daily_pass = contraction["is_contraction"] and has_edge and sma_ok and vol_ok
         else:
-            # Practical scanner: contraction + SMA is enough, edge is bonus for ranking
-            daily_pass = contraction["is_contraction"] and sma_ok
+            # Practical scanner: contraction + SMA + dried volume is enough, edge is bonus for ranking
+            # Entry should be on small candle before breakout (contraction high) — which we do via contraction_high
+            daily_pass = contraction["is_contraction"] and sma_ok and vol_ok
         
         # Calculate Entry/SL if pass
         entry_sl = None
@@ -196,10 +213,17 @@ class SanuMomentumStrategy:
             reasons = []
             if not contraction["is_contraction"]:
                 reasons.append(f"No contraction: {contraction['details']}")
+            if not vol_dried.get("dried"):
+                # Show breakout vs contraction vol ratio
+                ratio = vol_dried.get('ratio', 0)
+                thr = vol_dried.get('threshold', 0.45)
+                bdate = vol_dried.get('breakout_date', vol_dried.get('breakout',{}).get('date','?')) if isinstance(vol_dried.get('breakout'), dict) else vol_dried.get('breakout_date','?')
+                reasons.append(f"Volume not dried vs breakout: {ratio:.1%} (need <{thr:.0%}, breakout {bdate})")
             if REQUIRE_EDGE_FILTER and not has_edge:
                 reasons.append(f"No edge (Fibo:{in_fibo} 52W:{near_52w['near']} {near_52w['dist_pct']:.1%} away)")
             if not sma_ok:
-                reasons.append(f"Not near Daily 20SMA ({sma_prox['dist_pct']:.1%})")
+                which = sma_prox.get('which','MA')
+                reasons.append(f"Not near MA ({which} dist {sma_prox['dist_pct']:.1%} 10:{sma_prox.get('dist10_pct',0):.1%} 20:{sma_prox.get('dist20_pct',0):.1%})")
             reason = "; ".join(reasons) if reasons else "Unknown daily fail"
         
         return {
@@ -207,6 +231,7 @@ class SanuMomentumStrategy:
             "reason": reason,
             "contraction": contraction,
             "sma_proximity": sma_prox,
+            "vol_dried": vol_dried,
             "fibo": fibo,
             "in_fibo_zone": in_fibo,
             "near_52w": near_52w,
@@ -227,11 +252,30 @@ class SanuMomentumStrategy:
             if df_daily.empty or df_weekly.empty:
                 return {"symbol": symbol, "pass": False, "reason": "No data", "weekly": None, "daily": None}
             
-            # Optional: slice to as_of_date for historical backtest point
+            # Optional: slice to as_of_date for historical backtest point (handle tz-aware vs naive)
             if as_of_date:
                 as_of = pd.to_datetime(as_of_date)
-                df_daily = df_daily[df_daily.index <= as_of]
-                df_weekly = df_weekly[df_weekly.index <= as_of]
+                # Handle timezone mismatch (yfinance returns Asia/Kolkata tz-aware)
+                if df_daily.index.tz is not None:
+                    if as_of.tz is None:
+                        try:
+                            as_of = as_of.tz_localize(df_daily.index.tz)
+                        except:
+                            as_of = as_of.tz_localize("Asia/Kolkata")
+                    df_daily = df_daily[df_daily.index <= as_of]
+                else:
+                    df_daily = df_daily[df_daily.index <= as_of]
+                if df_weekly.index.tz is not None:
+                    if as_of.tz is None:
+                        try:
+                            as_of_w = pd.to_datetime(as_of_date).tz_localize(df_weekly.index.tz)
+                        except:
+                            as_of_w = pd.to_datetime(as_of_date).tz_localize("Asia/Kolkata")
+                    else:
+                        as_of_w = as_of
+                    df_weekly = df_weekly[df_weekly.index <= as_of_w]
+                else:
+                    df_weekly = df_weekly[df_weekly.index <= as_of]
                 if df_daily.empty or df_weekly.empty:
                     return {"symbol": symbol, "pass": False, "reason": f"No data up to {as_of_date}"}
             
@@ -241,7 +285,23 @@ class SanuMomentumStrategy:
                 return {"symbol": symbol, "pass": False, "reason": "Illiquid / penny stock"}
             
             weekly_result = self.check_weekly_setup(df_weekly)
-            if not weekly_result["pass"]:
+            # User feedback: "you can consider contraction as pullback as well" — so if daily contraction is strong with dried volume, weekly pullback is optional
+            # Check if we can bypass weekly pullback requirement
+            bypass_weekly = False
+            if not weekly_result["pass"] and WEEKLY_PULLBACK_OPTIONAL_IF_DAILY_CONTRACTION:
+                # Peek at daily to see if contraction is strong — if yes, allow weekly bypass
+                # We need to check daily even though weekly failed
+                temp_daily = self.check_daily_setup(df_daily, df_weekly)
+                if temp_daily.get("pass") and temp_daily.get("contraction", {}).get("is_contraction") and temp_daily.get("vol_dried", {}).get("dried"):
+                    # Check if weekly failure is only due to pullback distance or volume dry, but uptrend still ok
+                    details = weekly_result.get("details", {})
+                    uptrend_ok = details.get("uptrend", False)
+                    if uptrend_ok:
+                        # Uptrend is most important — pullback can be considered as contraction itself
+                        bypass_weekly = True
+                        weekly_result["bypassed"] = True
+                        weekly_result["bypass_reason"] = "Weekly pullback considered as daily contraction (per your feedback: contraction as pullback, dried volume)"
+            if not weekly_result["pass"] and not bypass_weekly:
                 return {
                     "symbol": symbol,
                     "pass": False,
@@ -251,8 +311,11 @@ class SanuMomentumStrategy:
                     "daily": None,
                     "market": None
                 }
-            
-            daily_result = self.check_daily_setup(df_daily, df_weekly)
+            # If bypassed, continue to daily check (need to compute daily if not already)
+            if bypass_weekly:
+                daily_result = temp_daily
+            else:
+                daily_result = self.check_daily_setup(df_daily, df_weekly)
             if not daily_result["pass"]:
                 return {
                     "symbol": symbol,

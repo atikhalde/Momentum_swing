@@ -65,19 +65,36 @@ DAILY_MA_ENTRY = 20         # Contraction 20 MA ke paas hona chahiye (SMA or EMA
 DAILY_MA_TRAIL = 10         # Trailing with 10 MA on Daily (SMA or EMA)
 DAILY_SMA_ENTRY = 20         # Kept for backward compat (alias)
 DAILY_SMA_TRAIL = 10         # Kept for backward compat
-DAILY_SMA_PROXIMITY_PCT = 0.05 # Daily close within 5% of Daily 20 SMA (video says near; 3% too tight)
+DAILY_SMA_PROXIMITY_PCT = 0.05 # Daily close within 5% of Daily 20 MA (video says near; 3% too tight)
+# User feedback 2026-08-08: "it does not necessary on sma 20 only, sometimes its on sma 10 as well"
+# So we now check BOTH 10 and 20 — pass if near EITHER (more flexible, matches your 6 examples)
+DAILY_MA_CHECK_BOTH = True   # If True, pass if contraction near 10 OR 20 (recommended for your examples)
+DAILY_MA10_PROXIMITY_PCT = 0.08 # SMA10 proximity threshold (was 5%, increased to 8% to capture your examples: NRBBEARING 8.9% dist, INDSWFTLAB 6.2% etc)
+DAILY_MA20_PROXIMITY_PCT = 0.08 # SMA20 proximity threshold (was 5%, increased to 8%)
 
 # Contraction Definition
 # Video: "Small candles, inside candles jab ek zone ek jagah pe form hote he toh contraction"
-# Strict video replication would be 0.70 range & 2.5% cluster, but live Indian market volatility requires higher
-CONTRACTION_DAYS = 3         # 2-4 small candles cluster
-CONTRACTION_DAYS_ALT = 4
-CONTRACTION_RANGE_FACTOR = 1.0 # Each candle's range < 1.0 * ATR(14) (relaxed from 0.70 strict) - allows slightly larger candles but still small
+# User feedback 2026-08-08: Important dried volume + contraction, can be small (3-7 days) OR big (10-30 days like PANAMAPET 17 July big contraction)
+# User feedback #2: Your 6 examples (PANAMAPET, NRBBEARING, INDSWFTLAB, GANDHAR, HONASA) show tight fails at 6-8% and SMA distance 6-9% — so further relaxed
+CONTRACTION_DAYS = 3         # Small contraction: 2-4 small candles cluster (e.g., PANAMAPET 11-17 June, 3-5 days, now passes at 5.41%)
+CONTRACTION_DAYS_ALT = 5     # Alternative small: 5 days
+CONTRACTION_RANGE_FACTOR = 1.0 # Each candle's range < 1.0 * ATR(14) (relaxed from 0.70 strict)
 CONTRACTION_BODY_FACTOR = 0.60  # Body < 60% of range (relaxed from 45%)
 CONTRACTION_ATR_PERIOD = 14
-CONTRACTION_CLUSTER_PCT = 0.045 # Entire cluster high-low < 4.5% range (relaxed from 2.5% strict)
-CONTRACTION_INSIDE_BAR_REQUIRED = 1 # At least 1 inside bar (relaxed from 2) - still captures indecision
+CONTRACTION_CLUSTER_PCT = 0.085 # Small contraction: <8.5% (was 6%, increased to capture NRBBEARING 8.43%, INDSWFTLAB 6.8%, GANDHAR 6.01%, HONASA 8.9%)
+CONTRACTION_INSIDE_BAR_REQUIRED = 1 # At least 1 inside bar
 CONTRACTION_VOLUME_DRY = True # Contraction volume should also be dry
+# Big contraction support (User: PANAMAPET big contraction 23 June - 17 July = 24 days, NRBBEARING etc)
+CONTRACTION_BIG_DAYS = 15     # Big contraction window: 10-20 days consolidation (pullback as contraction)
+CONTRACTION_BIG_CLUSTER_PCT = 0.15 # Big contraction cluster <15% (was 12%, now 15% to capture 11.45% + 14% cases)
+CONTRACTION_BIG_RANGE_FACTOR = 1.2 # Big candles can be slightly larger
+# Volume dried vs breakout (User: "after big breakout with volume there is contraction" — volume must be dried)
+VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.45 # Contraction avg volume <45% of breakout volume = dried (PANAMAPET 2.4% is well below)
+BREAKOUT_VOLUME_MULTIPLIER = 2.0 # Breakout candle vol >2.0x Avg20 is considered big breakout with volume
+BREAKOUT_RANGE_MULTIPLIER = 1.5 # Breakout range >1.5x ATR is considered big breakout
+# Weekly pullback is now considered SAME as contraction/pullback per user: "you can consider contraction as pullback as well"
+# So weekly pullback check is now OPTIONAL if daily contraction with dried volume is strong — we keep it but allow bypass
+WEEKLY_PULLBACK_OPTIONAL_IF_DAILY_CONTRACTION = True
 
 # Fibonacci Edge Filter
 # Video: The EDGE - "0.5 to 0.6 ke paas jo bhi contraction ban raha hai, uski possibility kaafi zyada hai"
@@ -101,7 +118,7 @@ STOP_BUFFER_PCT = 0.002      # SL = Contraction Low * (1 - 0.2%)
 # Stop Loss on chart usually 2.5% to 3.4% - mentioned in video
 EXPECTED_SL_MIN_PCT = 0.015
 EXPECTED_SL_MAX_PCT = 0.050  # Allow up to 5% but ideal is 2.5-3.5%
-REJECT_SL_TOO_WIDE_PCT = 0.06 # Reject if SL >6% (too wide)
+REJECT_SL_TOO_WIDE_PCT = 0.10 # Reject if SL >10% (was 6%, increased to capture your big contraction examples like NRBBEARING 7.4% SL, GANDHAR etc). Small contraction ideal 2.5-3.5% but big contraction can be 7-9% and still valid with 1:6 RR.
 
 # Targets - Video: "15 to 20% nikle trade ko exit karo. 1:6 1:7 dikhe bahar nikal jao"
 TARGET_1_PCT = 0.15           # First booking at 15%

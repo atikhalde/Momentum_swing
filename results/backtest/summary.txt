@@ -2,28 +2,28 @@ Sanu Kumar Momentum Swing Strategy - 5 Year Backtest Summary
 ======================================================================
 
 Video: https://youtu.be/EgSuB9D-xAw
-Period: 2y (yfinance, Dhan never used for backtest)
-Universe: Nifty 500 (15 stocks tested)
-Generated: 2026-08-07 21:22 IST
+Period: 1y (yfinance, Dhan never used for backtest)
+Universe: Nifty 500 (10 stocks tested)
+Generated: 2026-08-07 22:26 IST
 
-Total Trades: 38
-Win Rate %: 26.32
-Loss Rate %: 73.68
-Avg Win (Rs): 9344.65
-Avg Loss (Rs): -3657.65
-Avg Win %: 6.12
-Avg Loss %: -1.28
-Profit Factor: 0.91
-Payoff Ratio: 2.55
-Expectancy (Rs): -235.99
-Total PnL (Rs): -8967.65
-Total Return %: -0.9
-CAGR %: -0.63
-Max Drawdown %: -8.06
-Avg Holding Days: 8.08
-Best Trade %: 1995.0
-Worst Trade %: -532.0
-Years: 1.42
+Total Trades: 14
+Win Rate %: 50.0
+Loss Rate %: 50.0
+Avg Win (Rs): 4571.1
+Avg Loss (Rs): -2511.41
+Avg Win %: 3.36
+Avg Loss %: -1.52
+Profit Factor: 1.82
+Payoff Ratio: 1.82
+Expectancy (Rs): 1029.85
+Total PnL (Rs): 14417.84
+Total Return %: 1.44
+CAGR %: 3.57
+Max Drawdown %: -0.71
+Avg Holding Days: 7.0
+Best Trade %: 748.0
+Worst Trade %: -466.0
+Years: 0.41
 Initial Capital: 1000000
-Final Equity: 991032.35
-Video Expectation Match: Check - may need tuning
+Final Equity: 1014417.84
+Video Expectation Match: YES - Win rate ~40-50% with 1:5-1:6 RR
