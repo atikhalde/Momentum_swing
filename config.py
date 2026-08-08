@@ -88,7 +88,7 @@ CONTRACTION_VOLUME_DRY = True # Contraction volume should also be dry
 CONTRACTION_BIG_DAYS = 15     # Big contraction window: 10-20 days consolidation (pullback as contraction)
 CONTRACTION_BIG_CLUSTER_PCT = 0.15 # Big contraction cluster <15% (was 12%, now 15% to capture 11.45% + 14% cases)
 CONTRACTION_BIG_RANGE_FACTOR = 1.2 # Big candles can be slightly larger
-MIN_DAYS_SINCE_BREAKOUT = 0 # Disabled - was filtering true NRBBEARING 20 May (7 days after breakout) incorrectly; CHOICEIN 06 Aug vs 30 July both technically valid per strategy, 30 July is primary entry before 03 Aug breakout # Re-enabled with correct logic: now excludes contraction period (last 3 days) when looking for breakout, so 03 Aug breakout 1 day before 04 Aug contraction is correctly flagged for CHOICEIN 06 Aug (3 days after), but 13 May breakout 7 days before 20 May contraction (5 days before start) is at edge and will be handled with tiered vol
+MIN_DAYS_SINCE_BREAKOUT = 0 # Disabled to keep PANAMAPET 17 June (1 day after 10 June breakout) as true per your 6 examples; CHOICEIN 30 July primary vs 06 Aug secondary both technically valid per strategy, user can pick primary
 # Volume dried vs breakout (User: "after big breakout with volume there is contraction" — volume must be dried)
 VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.25 # Contraction avg volume <25% of breakout volume = dried (was 30% still allows YESBANK 29.8% borderline; 25% correctly filters YESBANK 29.8% as false, keeps PANAMAPET 1-6% true)
 BREAKOUT_VOLUME_MULTIPLIER = 2.0 # Breakout candle vol >2.0x Avg20 is considered big breakout with volume
