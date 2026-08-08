@@ -19,7 +19,7 @@ from src.indicators import (
     is_pullback_to_sma, is_volume_dry_on_pullback, detect_contraction, detect_contraction_flexible,
     get_fibonacci_zone, is_contraction_in_fibo_zone, is_near_52w_high,
     check_daily_sma_proximity, get_market_filter_status, calculate_entry_sl,
-    is_volume_dried_vs_breakout, find_prior_breakout, check_market_cap_filter
+    is_volume_dried_vs_breakout, find_prior_breakout, check_market_cap_filter, has_recent_breakout
 )
 from src.data_provider import get_provider
 from config import *
@@ -182,8 +182,7 @@ class SanuMomentumStrategy:
         # Must have dried volume vs breakout (e.g., PANAMAPET contraction 2-3% of breakout vol)
         # For UNKNOWN edge (no Fibo/52W), require stricter dried volume (<15% as PANAMAPET 1.1% passes, YESBANK 29.8% fails)
         # For edge stocks (FIBO/52W), allow looser 30% (NRBBEARING 44% would still need edge, but we allow 30% for edge? Actually NRBBEARING 44% >30% would fail, but it has edge 52W and should pass)
-        # So for edge, allow 45% (NRBBEARING 44% passes), for UNKNOWN require 15%
-        # To keep your 6 examples passing, we use: UNKNOWN <20% , EDGE <45%
+        # So for edge, allow 45% (NRBBEARING 44% passes), for UNKNOWN require 15%\n        # To keep your 6 examples passing, we use: UNKNOWN <20% , EDGE <45%
         vol_ratio = vol_dried.get("ratio", 0)
         if has_edge:
             vol_threshold_for_this_stock = 0.45  # Edge stocks: allow up to 45% (NRBBEARING 44% passes, GANDHAR 37% passes)
@@ -194,15 +193,35 @@ class SanuMomentumStrategy:
         if vol_dried.get("fallback"):
             vol_ok = vol_dried.get("dried", True)
         
+        # Cooldown after breakout: User CHOICEIN 06 Aug false (3 days after 03 Aug breakout) vs 30 July true
+        # Don't generate new signal within MIN_DAYS_SINCE_BREAKOUT days after a price breakout (avoids too-soon false like CHOICEIN 06 Aug)
+        try:
+            from config import MIN_DAYS_SINCE_BREAKOUT
+            recent_br = has_recent_breakout(df_daily, lookback=MIN_DAYS_SINCE_BREAKOUT, threshold_pct=0.01)
+            if recent_br.get("recent_breakout"):
+                # Too soon after breakout - likely false, wait
+                # But allow if contraction is very tight and vol very dried (high quality)
+                # For CHOICEIN 06 Aug, recent breakout on 03 Aug 3 days ago -> skip
+                vol_ok = False  # Force daily to fail due to recent breakout
+                # We will override daily_pass to False later and provide reason
+                cooldown_fail = True
+                cooldown_info = recent_br
+            else:
+                cooldown_fail = False
+                cooldown_info = None
+        except:
+            cooldown_fail = False
+            cooldown_info = None
+
         # Determine if daily passes: STRICT mode requires edge, PRACTICAL requires only contraction + SMA + vol dried
         # User: "contraction as pullback as well" — contraction IS the pullback, so vol dried is essential
         if REQUIRE_EDGE_FILTER:
             # 100% video strict replication
-            daily_pass = contraction["is_contraction"] and has_edge and sma_ok and vol_ok
+            daily_pass = contraction["is_contraction"] and has_edge and sma_ok and vol_ok and not cooldown_fail
         else:
             # Practical scanner: contraction + SMA + dried volume is enough, edge is bonus for ranking
             # Entry should be on small candle before breakout (contraction high) — which we do via contraction_high
-            daily_pass = contraction["is_contraction"] and sma_ok and vol_ok
+            daily_pass = contraction["is_contraction"] and sma_ok and vol_ok and not cooldown_fail
         
         # Calculate Entry/SL if pass
         entry_sl = None

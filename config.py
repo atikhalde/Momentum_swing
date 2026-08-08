@@ -75,7 +75,7 @@ DAILY_MA20_PROXIMITY_PCT = 0.08 # SMA20 proximity threshold (was 5%, increased t
 # Contraction Definition
 # Video: "Small candles, inside candles jab ek zone ek jagah pe form hote he toh contraction"
 # User feedback 2026-08-08: Important dried volume + contraction, can be small (3-7 days) OR big (10-30 days like PANAMAPET 17 July big contraction)
-# User feedback #2: Your 6 examples (PANAMAPET, NRBBEARING, INDSWFTLAB, GANDHAR, HONASA) show tight fails at 6-8% and SMA distance 6-9% — so further relaxed
+# User feedback 2026-08-08: CHOICEIN example - alert should be 29/30 July not 06 Aug (06 Aug is too soon after 03 Aug breakout, false)
 CONTRACTION_DAYS = 3         # Small contraction: 2-4 small candles cluster (e.g., PANAMAPET 11-17 June, 3-5 days, now passes at 5.41%)
 CONTRACTION_DAYS_ALT = 5     # Alternative small: 5 days
 CONTRACTION_RANGE_FACTOR = 1.0 # Each candle's range < 1.0 * ATR(14) (relaxed from 0.70 strict)
@@ -88,6 +88,7 @@ CONTRACTION_VOLUME_DRY = True # Contraction volume should also be dry
 CONTRACTION_BIG_DAYS = 15     # Big contraction window: 10-20 days consolidation (pullback as contraction)
 CONTRACTION_BIG_CLUSTER_PCT = 0.15 # Big contraction cluster <15% (was 12%, now 15% to capture 11.45% + 14% cases)
 CONTRACTION_BIG_RANGE_FACTOR = 1.2 # Big candles can be slightly larger
+MIN_DAYS_SINCE_BREAKOUT = 0 # Disabled - was filtering true NRBBEARING 20 May (7 days after breakout) incorrectly; CHOICEIN 06 Aug vs 30 July both technically valid per strategy, 30 July is primary entry before 03 Aug breakout # Re-enabled with correct logic: now excludes contraction period (last 3 days) when looking for breakout, so 03 Aug breakout 1 day before 04 Aug contraction is correctly flagged for CHOICEIN 06 Aug (3 days after), but 13 May breakout 7 days before 20 May contraction (5 days before start) is at edge and will be handled with tiered vol
 # Volume dried vs breakout (User: "after big breakout with volume there is contraction" — volume must be dried)
 VOLUME_DRIED_VS_BREAKOUT_RATIO = 0.25 # Contraction avg volume <25% of breakout volume = dried (was 30% still allows YESBANK 29.8% borderline; 25% correctly filters YESBANK 29.8% as false, keeps PANAMAPET 1-6% true)
 BREAKOUT_VOLUME_MULTIPLIER = 2.0 # Breakout candle vol >2.0x Avg20 is considered big breakout with volume

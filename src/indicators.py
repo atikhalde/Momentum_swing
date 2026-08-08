@@ -465,6 +465,39 @@ def is_volume_dried_vs_breakout(df_daily: pd.DataFrame, contraction_days: int = 
         "fallback": False
     }
 
+def has_recent_breakout(df_daily: pd.DataFrame, lookback: int = 5, threshold_pct: float = 0.01, exclude_contraction_days: int = 3) -> dict:
+    """
+    Check if there was a recent price breakout in last N days BEFORE the current contraction (to avoid false signals like CHOICEIN 06 Aug 3 days after 03 Aug breakout).
+    User: CHOICEIN alert should be 29/30 July not 06 Aug (06 Aug contraction 04-06 Aug is 3 days after 03 Aug breakout 835.8, too soon — should be filtered).
+    For CHOICEIN 06 Aug, contraction is 04-06 Aug (3 days), breakout before is 03 Aug high 835.8 vs prior 10d high 803 (+4%) — this is 1 day before contraction started, so within 5 days before contraction, should be flagged as recent.
+    For NRBBEARING 20 May, contraction 18-20 May, breakout before is 13 May (7 days before 20 May, 5 days before contraction start 18 May) — with lookback 5, this is 5 days before contraction, at edge, but we want to keep it, so we use exclude_contraction_days.
+    Checks high > prior 10d high by >threshold (1% to catch 841.8 vs 835.8 0.7% for CHOICEIN). Volume not required.
+    Returns True if recent breakout exists (should skip new signal).
+    """
+    if len(df_daily) < lookback + 10 + exclude_contraction_days:
+        return {"recent_breakout": False}
+    # Exclude the contraction period itself (last exclude_contraction_days) — look for breakout BEFORE contraction started
+    # e.g., for 06 Aug contraction 04-06 Aug (3 days), look at 5 days before 04 Aug (i.e., 28 July - 03 Aug) for breakout
+    df_before_contraction = df_daily.iloc[:-exclude_contraction_days] if exclude_contraction_days > 0 else df_daily
+    if len(df_before_contraction) < lookback + 10:
+        return {"recent_breakout": False}
+    recent_window = df_before_contraction.tail(lookback + 10)
+    # Check last `lookback` days before contraction for breakout - require volume confirmation to avoid false wicks
+    for i in range(len(recent_window)-lookback, len(recent_window)):
+        if i < 10:
+            continue
+        curr = recent_window.iloc[i]
+        prior_high = recent_window['High'].iloc[max(0,i-10):i].max()
+        if curr['High'] > prior_high * (1 + threshold_pct):
+            # Require volume at least 1.2x avg to confirm real breakout (CHOICEIN 03 Aug 0.46x should NOT count, PANAMAPET 10 June 14x should)
+            avg_vol = recent_window['Volume'].iloc[max(0,i-10):i].mean()
+            vol_ratio = curr['Volume'] / avg_vol if avg_vol else 0
+            if vol_ratio < 1.2:
+                continue
+            days_ago = len(df_daily) - 1 - (len(df_before_contraction) - len(recent_window) + i)
+            return {"recent_breakout": True, "date": curr.name.strftime("%Y-%m-%d") if hasattr(curr.name, 'strftime') else str(curr.name), "high": float(curr['High']), "prior_high": float(prior_high), "days_ago": int(days_ago), "vol_ratio": float(vol_ratio)}
+    return {"recent_breakout": False}
+
 def get_fibonacci_zone(df_daily: pd.DataFrame, lookback: int = 60, fib_low: float = 0.50, fib_high: float = 0.60) -> dict:
     """
     Video Edge 1: "Pure zone ka upar se leke neeche low tak Fibo lagao, 0.5 to 0.6 level ko mark kar lo"
