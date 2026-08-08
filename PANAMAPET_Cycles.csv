@@ -1,0 +1,4 @@
+Cycle,Breakout_Date,Breakout_Vol_Ratio,Contraction,Cont_Range_Pct,Vol_Dried_Pct,SMA10_Dist,SMA20_Dist,Edge_Fibo,Edge_52W,Entry,SL,Risk_Pct,Momentum_Pct
+Cycle 1: 10 June Breakout → 11-17 June Small Contraction → 18-19 June Momentum,2026-06-10,14.1x,2026-06-11 to 2026-06-17 (5 days),6.6%,2.6%,2.3%,7.4%,False,False,393.3,366.6,6.8%,36.9%
+Cycle 2: 19 June Breakout → 23 June-17 July BIG Contraction → 20 July Momentum,2026-06-19,6.5x,2026-06-23 to 2026-07-17 (19 days),21.6%,2.4%,1.6%,2.3%,True,False,490.8,397.4,19.0%,24.0%
+Cycle 3: 23-24 July Breakout → 27 July-05 Aug Contraction → 06 Aug Momentum,2026-07-23,5.3x,2026-07-27 to 2026-08-05 (7 days),15.5%,10.1%,2.1%,1.9%,True,False,504.5,431.8,14.4%,12.0%
