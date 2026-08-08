@@ -195,7 +195,7 @@ BACKTEST_SLIPPAGE = SLIPPAGE_PCT
 # ==================== SCANNER SETTINGS ====================
 SCANNER_OUTPUT_DIR = "results/scanner"
 SCANNER_OUTPUT_FILE = "daily_scan_{date}.csv"
-SCANNER_TOP_N = 50
+SCANNER_TOP_N = 12  # Few top like panamapet per your request (was 50 -> too many false, now 12 high-conviction)
 SCANNER_MIN_VOLUME_AVG = 100000  # Minimum avg daily volume (liquidity filter)
 SCANNER_MIN_PRICE = 50           # Avoid penny stocks
 SCANNER_MAX_PRICE = 10000
