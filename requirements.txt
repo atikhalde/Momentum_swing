@@ -19,5 +19,8 @@ lxml>=4.9.0
 # PDF report generation (for backtest reports)
 reportlab>=4.0.0
 
+# Rich terminal output for Python scanner (alternative to HTML)
+rich>=13.0.0
+
 # For notebooks (optional)
 jupyter>=1.0.0

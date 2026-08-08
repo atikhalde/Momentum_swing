@@ -49,24 +49,45 @@ SCANNER_DATA_PROVIDER = "AUTO"         # scanner = Dhan -> yfinance
 
 ## ⚡ Quick Start
 
-### 1. Daily Live Scanner (Find stocks TODAY) — Uses Dhan → yfinance fallback
+### 1. Daily Live Scanner — **Python Native (No HTML Needed)** ⭐ NEW per your request
+
+**HTML is still generated for GitHub viewing, but you now have a pure Python scanner:**
+
 ```bash
-# Scan full Nifty 500 (Dhan if creds present, else yfinance)
-python run_scanner.py
+# Full 500 — prints rich table to terminal (no HTML needed)
+python python_scanner.py
 
-# Quick test on 50 stocks
+# Quick 50, top 15 only
+python python_scanner.py --limit 50 --top 15
+
+# Single stock deep debug (shows weekly, contraction, volume dried, SMA, edge, entry on small candle)
+python python_scanner.py --symbol PANAMAPET
+python python_scanner.py --symbol CHOICEIN
+
+# Python API — use directly in your code / notebooks
+python -c "from python_scanner import scan; df = scan(limit=50); print(df[['Symbol','Entry','SL','Edge']].head())"
+
+# JSON output for integration (e.g., Telegram bot)
+python python_scanner.py --limit 20 --json > scan.json
+
+# Also still works: classic scanner with HTML
 python run_scanner.py --limit 50
-
-# Check one stock in detail (video example)
-python run_scanner.py --symbol HINDCOPPER
-
-# Outputs:
-# results/scanner/daily_scan_2025-12-30.csv
-# results/scanner/latest_scan.csv
-# results/scanner/daily_scan_2025-12-30.html  <- open in browser
+# Outputs: results/scanner/latest_scan.csv + latest_scan.html
 ```
 
-**Scanner output columns:** `Symbol | Entry | SL | Risk_Pct | Target_15pct | Target_RR6 | Edge (FIBO/52W) | RR | Volume`
+**Python vs HTML:**
+- `python_scanner.py` → **Rich terminal table** (needs `rich` pip), `CSV` + `DataFrame` returned, no browser needed. Ideal for you: `also make it python scanner instead of html`
+- `run_scanner.py` → `HTML` (for GitHub preview) + `CSV` — kept for compatibility
+
+**Scanner output columns (both):** `Symbol | Entry | SL | Risk_Pct | Target_15pct | Target_RR6 | Edge (FIBO/52W) | RR | Volume` + market cap <20000 filter
+
+### 1b. Also Available: Classic HTML Scanner
+
+```bash
+# Still generates HTML for GitHub preview
+python run_scanner.py --limit 50
+# Outputs: results/scanner/latest_scan.html  <- open in browser
+```
 
 ### 2. 5-Year Backtest (Validate 1:6 RR) — yfinance ONLY
 ```bash
@@ -143,20 +164,24 @@ python run_backtest.py --symbol RELIANCE --period 2y
 Momentum_swing/
 ├── config.py              # SINGLE SOURCE OF TRUTH - all video rules parameterized
 ├── requirements.txt
-├── run_scanner.py         # Daily live scanner CLI
-├── run_backtest.py        # 5-year backtester CLI
+├── python_scanner.py      # ⭐ NEW Python-native scanner (rich terminal, no HTML needed) per your request
+├── run_scanner.py         # Classic scanner (generates HTML for GitHub preview)
+├── run_backtest.py        # 5-year backtester CLI (yfinance ONLY, generates PDF)
+├── PANAMAPET_Deep_Dive.html # Deep dive: All indicators on PANAMAPET + edge analysis (your 3 cycles)
 ├── src/
-│   ├── indicators.py      # SMA, ATR, Contraction, Fibo, Volume logic
-│   ├── strategy.py        # SanuMomentumStrategy class (check_signal + scan_universe)
-│   ├── data_provider.py   # Dhan API → yfinance fallback
+│   ├── indicators.py      # SMA/EMA, ATR, Contraction (small/big), Fibo, Volume dried vs breakout, Market cap
+│   ├── strategy.py        # SanuMomentumStrategy (weekly bypass, tiered vol, SMA10/20 both, entry on small candle)
+│   ├── data_provider.py   # Dhan API → yfinance fallback (backtest yfinance ONLY per your rule)
 │   ├── universe.py        # Nifty 500 fetcher (live NSE CSV + fallback)
-│   ├── backtest.py        # 5y event-driven backtester with 10 SMA trail
-│   └── scanner.py         # Daily scanner with HTML/CSV reports
+│   ├── backtest.py        # 5y event-driven backtester with 10 SMA trail + PDF report
+│   ├── scanner.py         # Daily scanner core (used by both HTML and Python scanners)
+│   └── report_pdf.py      # PDF generator for backtest reports
 ├── results/
-│   ├── backtest/          # trades_5y.csv, metrics, equity_curve.png
-│   └── scanner/           # daily_scan_YYYY-MM-DD.csv/.html
+│   ├── backtest/          # trades_5y.csv, metrics, equity_curve.png, backtest_report.pdf
+│   └── scanner/           # daily_scan_YYYY-MM-DD.csv/.html + latest_scan.csv/.html
 └── .github/workflows/
-    └── daily_scanner.yml  # GitHub Action: auto scan every market day 9:15 AM IST
+    ├── daily_scanner.yml  # Auto scan every market day 9:15 AM IST
+    └── backtest.yml       # Auto backtest weekly + manual (period/limit/capital) - visible per your request
 ```
 
 ---
